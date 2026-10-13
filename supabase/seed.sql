@@ -1,0 +1,1 @@
+-- No seed data: tests create their own users and boards.

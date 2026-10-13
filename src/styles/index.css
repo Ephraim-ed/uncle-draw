@@ -1,0 +1,56 @@
+/* Tailwind without preflight: its global resets (svg{display:block}, border and
+ * margin resets) would leak into Excalidraw's UI. base.css carries a small,
+ * shell-scoped reset instead. */
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+
+@import "./tokens.css";
+@import "./fonts.css";
+@import "./base.css";
+@import "./sketch.css" layer(components);
+@import "./slot.css";
+
+/* Map design tokens into Tailwind. Tailwind's default palette is removed so
+ * only tokens can be used for color. */
+@theme inline {
+  --color-*: initial;
+  --color-paper: var(--ud-paper);
+  --color-surface: var(--ud-surface);
+  --color-surface-sunken: var(--ud-surface-sunken);
+  --color-ink: var(--ud-ink);
+  --color-ink-muted: var(--ud-ink-muted);
+  --color-ink-faint: var(--ud-ink-faint);
+  --color-primary: var(--ud-primary);
+  --color-primary-hover: var(--ud-primary-hover);
+  --color-on-primary: var(--ud-on-primary);
+  --color-primary-soft: var(--ud-primary-soft);
+  --color-highlight: var(--ud-highlight);
+  --color-danger: var(--ud-danger);
+  --color-danger-soft: var(--ud-danger-soft);
+  --color-success: var(--ud-success);
+  --color-success-soft: var(--ud-success-soft);
+  --color-warning: var(--ud-warning);
+  --color-transparent: transparent;
+
+  --font-hand: var(--ud-font-hand);
+  --font-ui: var(--ud-font-ui);
+  --font-mono: var(--ud-font-mono);
+
+  /* Type scale (§4) */
+  --text-display: 40px;
+  --text-display--line-height: 48px;
+  --text-h1: 28px;
+  --text-h1--line-height: 36px;
+  --text-h2: 20px;
+  --text-h2--line-height: 28px;
+  --text-body: 16px;
+  --text-body--line-height: 24px;
+  --text-label: 14px;
+  --text-label--line-height: 20px;
+  --text-mono: 13px;
+  --text-mono--line-height: 20px;
+
+  --breakpoint-tablet: 640px;
+  --breakpoint-desktop: 1024px;
+}

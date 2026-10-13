@@ -1,0 +1,25 @@
+/* src/styles/excalidraw-overrides.css (VISUAL_DESIGN.md §3.3)
+ * Only the primary color family is overridden. Never restyle Excalidraw's
+ * internal class names; they change between releases. */
+.ud-editor .excalidraw {
+  --color-primary: #1971c2;
+  --color-primary-darker: #1864ab;
+  --color-primary-darkest: #145591;
+  --color-primary-hover: #1864ab;
+  --color-primary-light: #e7f5ff;
+  --color-primary-light-darker: #d0ebff;
+}
+.ud-editor .excalidraw.theme--dark {
+  --color-primary: #4dabf7;
+  --color-primary-darker: #74c0fc; /* "darker" means more emphasis, i.e. lighter on dark */
+  --color-primary-darkest: #a5d8ff;
+  --color-primary-hover: #74c0fc;
+  --color-primary-light: #1c3a57;
+  --color-primary-light-darker: #24496d;
+}
+
+.ud-editor {
+  position: relative;
+  height: 100dvh;
+  width: 100%;
+}

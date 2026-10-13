@@ -1,0 +1,27 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+*.tsbuildinfo
+
+# env
+.env.local
+.env.*.local
+
+# Excalidraw fonts copied at build time (tech §4.1)
+public/excalidraw-assets/
+
+# tests
+coverage/
+playwright-report/
+test-results/
+blob-report/
+
+# supabase
+supabase/.temp/
+supabase/.branches/
+
+# os / editors
+.DS_Store
+*.log

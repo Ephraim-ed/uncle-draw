@@ -1,0 +1,11 @@
+dist
+coverage
+playwright-report
+test-results
+public/excalidraw-assets
+src/lib/database.types.ts
+package-lock.json
+docs
+supabase/.temp
+supabase/functions/**/deno.lock
+public/favicon.svg

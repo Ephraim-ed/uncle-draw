@@ -1,0 +1,75 @@
+/* Design tokens (VISUAL_DESIGN.md §3.2). Components read these; never hard-code hex. */
+:root {
+  color-scheme: light;
+
+  --ud-paper: #fdfbf6;
+  --ud-surface: #ffffff;
+  --ud-surface-sunken: #f4f1ea;
+  --ud-ink: #1e1e1e;
+  --ud-ink-muted: #5c5c66;
+  --ud-ink-faint: #a6a6ae;
+  --ud-dot: #ddd8cc;
+  --ud-primary: #1971c2;
+  --ud-primary-hover: #1864ab;
+  --ud-on-primary: #ffffff;
+  --ud-primary-soft: #e7f5ff;
+  --ud-highlight: #ffec99;
+  --ud-danger: #e03131;
+  --ud-danger-soft: #ffc9c9;
+  --ud-success: #2f9e44;
+  --ud-success-soft: #b2f2bb;
+  --ud-warning: #f08c00;
+  --ud-shadow: #1e1e1e;
+  --ud-scrim: rgb(30 30 30 / 0.35);
+
+  /* Not themed: sticky notes keep ink text on yellow in both themes (§5.3 Toast). */
+  --ud-note-ink: #1e1e1e;
+  --ud-note-focus: #1971c2;
+  /* Thumbnail well: sunken paper in light mode; a white sheet in dark mode
+   * because thumbnails are always exported light (§3.3, §6.2). */
+  --ud-thumb-well: #f4f1ea;
+
+  --ud-font-hand: "Excalifont UD", "Excalifont", "Comic Sans MS", cursive;
+  --ud-font-ui: "Assistant Variable", "Assistant", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --ud-font-mono: "Cascadia Code", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --ud-ease-out: cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --ud-paper: #121212;
+  --ud-surface: #1e1e22;
+  --ud-surface-sunken: #0c0c0e;
+  --ud-ink: #e8e6e3;
+  --ud-ink-muted: #a3a1a8;
+  --ud-ink-faint: #55545a;
+  --ud-dot: #2a2a2e;
+  --ud-primary: #4dabf7;
+  --ud-primary-hover: #74c0fc;
+  --ud-on-primary: #121212;
+  --ud-primary-soft: #1c3a57;
+  --ud-highlight: #ffec99;
+  --ud-danger: #ff6b6b;
+  --ud-danger-soft: #4a1e1e;
+  --ud-success: #51cf66;
+  --ud-success-soft: #1e3a24;
+  --ud-warning: #ffa94d;
+  --ud-shadow: #000000;
+  --ud-scrim: rgb(0 0 0 / 0.6);
+
+  --ud-thumb-well: #ffffff;
+}
+
+/* A light-theme island inside a dark page, e.g. the blank sheet drawn in a
+ * thumbnail well, which is always light. */
+.ud-force-light {
+  color-scheme: light;
+  --ud-surface: #ffffff;
+  --ud-ink: #1e1e1e;
+  --ud-ink-muted: #5c5c66;
+  --ud-ink-faint: #a6a6ae;
+  --ud-primary: #1971c2;
+  --ud-shadow: #1e1e1e;
+}

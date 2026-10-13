@@ -1,0 +1,89 @@
+# CI (TECHNICAL_REQUIREMENTS.md §14): lint → typecheck → unit/component tests →
+# local Supabase + RLS tests → Edge Function tests → Playwright → build →
+# bundle-size check.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit and component tests
+        run: npm test
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.120.0
+
+      - name: Start local Supabase
+        run: supabase start -x studio,imgproxy,vector,logflare,supavisor,realtime
+
+      - name: Database tests (RLS, save_board, shares)
+        run: supabase test db
+
+      - name: Generated types match the migrations
+        run: |
+          supabase gen types typescript --local --schema public > "$RUNNER_TEMP/database.types.ts"
+          if ! diff -u src/lib/database.types.ts "$RUNNER_TEMP/database.types.ts"; then
+            echo "::error::src/lib/database.types.ts is out of date. Run 'npm run gen:types' and commit the result."
+            exit 1
+          fi
+
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Edge Function tests
+        run: deno test supabase/functions/
+
+      - name: Export local Supabase settings
+        run: supabase status -o env | sed -E 's/^([A-Z_]+)="(.*)"$/\1=\2/' >> "$GITHUB_ENV"
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: E2E (Playwright)
+        run: npx playwright test
+        env:
+          VITE_SUPABASE_URL: ${{ env.API_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ env.ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ env.SERVICE_ROLE_KEY }}
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+
+      - name: Build
+        run: npm run build
+
+      - name: Bundle size (shell JS ≤ 200 KB gzip)
+        run: npm run check:bundle

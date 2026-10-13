@@ -1,0 +1,783 @@
+/* Sketch component kit (VISUAL_DESIGN.md §5, §8).
+ *
+ * Imported into the `components` layer, so Tailwind utilities can still
+ * override it. The few rules that must beat Excalidraw's unlayered CSS inside
+ * its slots live in slot.css. */
+
+/* ---------- Overlay ---------------------------------------------------- */
+
+.ud-sketch {
+  position: relative;
+  isolation: isolate;
+}
+
+.ud-sketch__art {
+  position: absolute;
+  left: -2px;
+  top: -2px;
+  width: calc(100% + 4px);
+  height: calc(100% + 4px);
+  overflow: visible;
+  pointer-events: none;
+  z-index: -1;
+  color: var(--ud-ink);
+}
+
+.ud-sketch__fill {
+  fill: var(--ud-sketch-fill, transparent);
+  stroke: none;
+  transition: fill 80ms ease-out;
+}
+.ud-sketch__hachure {
+  fill: none;
+  stroke: var(--ud-sketch-fill, transparent);
+  stroke-linecap: round;
+}
+.ud-sketch__stroke {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+}
+
+.ud-sketch__shadow {
+  transform: translate(var(--ud-so, 0px), var(--ud-so, 0px));
+  transition: transform 80ms ease-out;
+}
+.ud-sketch__shadow-fill {
+  fill: var(--ud-shadow);
+  stroke: none;
+}
+.ud-sketch__shadow-stroke,
+.ud-sketch__shadow-hachure {
+  fill: none;
+  stroke: var(--ud-shadow);
+}
+
+.ud-sketch__focus {
+  color: var(--ud-primary);
+  opacity: 0;
+}
+.ud-sketch:focus-visible > .ud-sketch__art .ud-sketch__focus {
+  opacity: 1;
+}
+
+/* Real outline on every focus-visible control: wobbly lines alone aren't a
+ * reliable indicator (§10). */
+.ud-shell :focus-visible,
+.ud-sketch:focus-visible {
+  outline: 2px solid var(--ud-primary);
+  outline-offset: 3px;
+}
+
+/* ---------- Buttons ---------------------------------------------------- */
+
+.ud-btn.ud-sketch {
+  --ud-so: 3px;
+  --ud-sketch-fill: var(--ud-surface);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 8px 18px;
+  border: 0;
+  background: none;
+  color: var(--ud-ink);
+  font-family: var(--ud-font-ui);
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  transition: transform 80ms ease-out;
+}
+.ud-btn.ud-sketch:hover {
+  text-decoration: none;
+}
+.ud-btn--sm.ud-sketch {
+  min-height: 36px;
+  padding: 6px 12px;
+}
+.ud-btn--hand.ud-sketch {
+  font-family: var(--ud-font-hand);
+  font-size: 20px;
+  line-height: 28px;
+  font-weight: 400;
+}
+.ud-btn__icon {
+  display: inline-flex;
+}
+
+.ud-btn--primary.ud-sketch {
+  --ud-sketch-fill: var(--ud-primary);
+  color: var(--ud-on-primary);
+}
+.ud-btn--primary.ud-sketch:hover:not(:disabled) {
+  --ud-sketch-fill: var(--ud-primary-hover);
+  --ud-so: 4px;
+  transform: translate(-1px, -1px);
+}
+/* Destructive confirm. White on --ud-danger is exactly 4.5:1, so it is only
+ * used with 16 px semibold labels (§3.2). */
+.ud-btn--danger.ud-sketch {
+  --ud-sketch-fill: var(--ud-danger);
+  color: var(--ud-on-primary);
+  font-size: 16px;
+  line-height: 24px;
+}
+.ud-btn--danger.ud-sketch:hover:not(:disabled) {
+  --ud-so: 4px;
+  transform: translate(-1px, -1px);
+}
+.ud-btn--secondary.ud-sketch:hover:not(:disabled) {
+  --ud-sketch-fill: var(--ud-primary-soft);
+  --ud-so: 4px;
+  transform: translate(-1px, -1px);
+}
+.ud-btn.ud-sketch:active:not(:disabled) {
+  --ud-so: 0px;
+  transform: translate(2px, 2px);
+}
+.ud-btn.ud-sketch:disabled,
+.ud-btn.ud-sketch[aria-disabled="true"] {
+  --ud-so: 0px;
+  --ud-sketch-fill: var(--ud-surface);
+  color: var(--ud-ink-faint);
+  cursor: not-allowed;
+}
+.ud-btn.ud-sketch:disabled .ud-sketch__art {
+  color: var(--ud-ink-faint);
+}
+.ud-btn.ud-sketch:disabled .ud-sketch__shadow {
+  display: none;
+}
+
+.ud-btn--danger-text.ud-sketch {
+  min-height: 36px;
+  padding: 6px 4px;
+  color: var(--ud-danger);
+}
+.ud-btn--danger-text.ud-sketch:hover:not(:disabled) {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+/* Ghost / icon button: 40×40 hit area, rough circle on hover. */
+.ud-iconbtn.ud-sketch {
+  --ud-sketch-fill: var(--ud-primary-soft);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ud-ink);
+  cursor: pointer;
+  border-radius: 50%;
+}
+.ud-iconbtn.ud-sketch > .ud-sketch__art {
+  opacity: 0;
+  transition: opacity 80ms ease-out;
+}
+.ud-iconbtn.ud-sketch:hover > .ud-sketch__art,
+.ud-iconbtn.ud-sketch:focus-visible > .ud-sketch__art,
+.ud-iconbtn.ud-sketch[aria-expanded="true"] > .ud-sketch__art {
+  opacity: 1;
+}
+.ud-iconbtn.ud-sketch:active {
+  --ud-sketch-fill: color-mix(in srgb, var(--ud-primary-soft), var(--ud-ink) 12%);
+}
+.ud-iconbtn.ud-sketch:disabled {
+  color: var(--ud-ink-faint);
+  cursor: not-allowed;
+}
+.ud-iconbtn__icon {
+  display: inline-flex;
+}
+
+/* ---------- Text input -------------------------------------------------- */
+
+.ud-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ud-field__label {
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 600;
+  color: var(--ud-ink);
+}
+.ud-field__hint {
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--ud-ink-muted);
+}
+.ud-field__error {
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--ud-danger);
+}
+
+.ud-input.ud-sketch {
+  display: block;
+}
+.ud-input .ud-sketch__art {
+  color: var(--ud-ink-muted);
+}
+.ud-input:hover .ud-sketch__stroke {
+  stroke-width: 2px;
+}
+.ud-input:focus-within .ud-sketch__art {
+  color: var(--ud-primary);
+}
+.ud-input[data-invalid] .ud-sketch__art {
+  color: var(--ud-danger);
+}
+.ud-input .ud-input__control {
+  display: block;
+  width: 100%;
+  padding: 8px 2px 10px;
+  border: 0;
+  border-radius: 2px;
+  background: transparent;
+  color: var(--ud-ink);
+  font-family: var(--ud-font-ui);
+  font-size: 16px;
+  line-height: 24px;
+  outline: none;
+  box-shadow: none;
+}
+.ud-input .ud-input__control::placeholder {
+  color: var(--ud-ink-muted);
+  opacity: 1;
+}
+.ud-input .ud-input__control:focus-visible {
+  outline: 2px solid var(--ud-primary);
+  outline-offset: 3px;
+  box-shadow: none;
+}
+.ud-input .ud-input__control:disabled {
+  color: var(--ud-ink-faint);
+}
+.ud-input .ud-input__control[readonly] {
+  font-family: var(--ud-font-mono);
+  font-size: 13px;
+  line-height: 20px;
+  padding-top: 10px;
+  padding-bottom: 12px;
+}
+
+/* ---------- Box / card -------------------------------------------------- */
+
+.ud-box {
+  color: var(--ud-ink);
+}
+
+.ud-card.ud-sketch {
+  --ud-so: 3px;
+  --ud-sketch-fill: var(--ud-surface);
+  display: flex;
+  flex-direction: column;
+  transition: transform 120ms ease-out;
+}
+.ud-card.ud-sketch .ud-sketch__shadow {
+  transition: transform 120ms ease-out;
+}
+.ud-card.ud-sketch:hover,
+.ud-card.ud-sketch:focus-within {
+  --ud-so: 5px;
+  transform: translate(-2px, -2px);
+}
+.ud-card.ud-sketch:active {
+  --ud-so: 1px;
+  transform: translate(1px, 1px);
+}
+
+/* ---------- Dialog ------------------------------------------------------ */
+
+.ud-dialog {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ud-ink);
+  overflow: visible;
+  font-family: var(--ud-font-ui);
+  font-size: 16px;
+  line-height: 24px;
+}
+.ud-dialog::backdrop {
+  background: var(--ud-scrim);
+}
+.ud-dialog[open] {
+  animation: ud-dialog-in 140ms var(--ud-ease-out);
+}
+.ud-dialog[open]::backdrop {
+  animation: ud-fade-in 140ms var(--ud-ease-out);
+}
+.ud-dialog[data-closing] {
+  animation: ud-dialog-out 100ms ease-in forwards;
+}
+.ud-dialog[data-closing]::backdrop {
+  animation: ud-fade-out 100ms ease-in forwards;
+}
+.ud-dialog__panel.ud-sketch {
+  --ud-sketch-fill: var(--ud-surface);
+  --ud-so: 6px;
+  padding: 20px 24px 24px;
+}
+.ud-dialog__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.ud-dialog__title {
+  margin: 0;
+  padding-top: 6px;
+  font-family: var(--ud-font-hand);
+  font-size: 20px;
+  line-height: 28px;
+  font-weight: 400;
+  overflow-wrap: anywhere;
+}
+.ud-dialog__close {
+  margin: -2px -10px 0 0;
+  flex: none;
+}
+.ud-dialog__body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.ud-dialog__footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+@keyframes ud-dialog-in {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes ud-dialog-out {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+}
+@keyframes ud-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes ud-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+/* ---------- Menu -------------------------------------------------------- */
+
+.ud-menu.ud-sketch {
+  --ud-sketch-fill: var(--ud-surface);
+  --ud-so: 3px;
+  position: fixed;
+  z-index: 10000;
+  padding: 6px;
+  color: var(--ud-ink);
+  font-family: var(--ud-font-ui);
+  font-size: 16px;
+  line-height: 24px;
+  animation: ud-fade-in 100ms ease-out;
+}
+.ud-menu__item.ud-sketch {
+  --ud-sketch-fill: var(--ud-highlight);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 8px 12px 8px 8px;
+  cursor: pointer;
+  user-select: none;
+  outline: none;
+  white-space: nowrap;
+}
+:root[data-theme="dark"] .ud-menu__item.ud-sketch {
+  --ud-sketch-fill: var(--ud-primary-soft);
+}
+.ud-menu__item > .ud-menu__hl {
+  opacity: 0;
+}
+.ud-menu__item:hover > .ud-menu__hl,
+.ud-menu__item:focus > .ud-menu__hl {
+  opacity: 1;
+}
+.ud-menu__item.ud-sketch:focus-visible {
+  outline: 2px solid var(--ud-primary);
+  outline-offset: 0;
+}
+.ud-menu__item[aria-disabled="true"] {
+  color: var(--ud-ink-faint);
+  cursor: default;
+}
+.ud-menu__item--danger {
+  color: var(--ud-danger);
+}
+.ud-menu__icon {
+  display: inline-flex;
+  width: 20px;
+  justify-content: center;
+  flex: none;
+}
+.ud-menu__sep {
+  height: 1px;
+  margin: 6px 8px;
+  background: var(--ud-ink-faint);
+  opacity: 0.6;
+}
+.ud-menu__label {
+  padding: 6px 12px 2px 38px;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--ud-ink-muted);
+}
+
+/* ---------- Toast (sticky note) ----------------------------------------- */
+
+.ud-toasts {
+  position: fixed;
+  inset: auto;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  overflow: visible;
+  z-index: 10001;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  pointer-events: none;
+  width: max-content;
+  max-width: calc(100vw - 32px);
+}
+.ud-toast.ud-sketch {
+  --ud-sketch-fill: var(--ud-highlight);
+  --ud-so: 2px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 18px;
+  color: var(--ud-note-ink);
+  font-family: var(--ud-font-ui);
+  font-size: 16px;
+  line-height: 24px;
+  transform: rotate(-1deg);
+  pointer-events: auto;
+  animation: ud-toast-in 180ms var(--ud-ease-out);
+}
+.ud-toast__action {
+  border: 0;
+  background: none;
+  padding: 4px 2px;
+  font: inherit;
+  font-weight: 600;
+  color: var(--ud-note-ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.ud-toast__action:focus-visible {
+  outline: 2px solid var(--ud-note-focus);
+  outline-offset: 2px;
+}
+
+@keyframes ud-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) rotate(-3deg);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) rotate(-1deg);
+  }
+}
+
+/* ---------- Avatar ------------------------------------------------------ */
+
+.ud-avatar.ud-sketch {
+  --ud-sketch-fill: var(--ud-primary-soft);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  border-radius: 50%;
+}
+.ud-avatar__img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  padding: 2px;
+}
+.ud-avatar__initial {
+  font-family: var(--ud-font-hand);
+  line-height: 1;
+  color: var(--ud-ink);
+}
+
+/* ---------- Reduced motion (§8) ----------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .ud-btn.ud-sketch,
+  .ud-card.ud-sketch,
+  .ud-sketch__shadow {
+    transition: none !important;
+  }
+  .ud-btn.ud-sketch:hover,
+  .ud-btn.ud-sketch:active,
+  .ud-card.ud-sketch:hover,
+  .ud-card.ud-sketch:focus-within,
+  .ud-card.ud-sketch:active {
+    transform: none !important;
+  }
+  .ud-toast.ud-sketch {
+    transform: none;
+    animation: ud-fade-in 100ms linear;
+  }
+  .ud-dialog[open],
+  .ud-dialog[open]::backdrop,
+  .ud-menu.ud-sketch {
+    animation: ud-fade-in 100ms linear;
+  }
+  .ud-dialog[data-closing],
+  .ud-dialog[data-closing]::backdrop {
+    animation: none;
+  }
+}
+
+/* ---------- Wordmark ---------------------------------------------------- */
+
+.ud-wordmark__squiggle {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  height: 10px;
+  overflow: visible;
+}
+
+/* ---------- Dashboard card parts ----------------------------------------- */
+
+.ud-card__well {
+  background: var(--ud-thumb-well);
+  border-bottom: 1px solid color-mix(in srgb, var(--ud-ink-faint), transparent 50%);
+}
+.ud-card__link {
+  color: inherit;
+  text-decoration: none;
+  outline-offset: 3px;
+}
+.ud-card__rename {
+  width: 100%;
+  padding: 2px 4px;
+  border: 0;
+  border-bottom: 2px solid var(--ud-primary);
+  background: transparent;
+  color: var(--ud-ink);
+  font-family: var(--ud-font-ui);
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 600;
+}
+.ud-card__rename:focus-visible {
+  outline: 2px solid var(--ud-primary);
+  outline-offset: 3px;
+}
+
+/* Floating "New board" on phones (§11): rough circle, bottom right. */
+.ud-fab.ud-sketch {
+  --ud-sketch-fill: var(--ud-primary);
+  --ud-so: 3px;
+  position: fixed;
+  right: 16px;
+  bottom: 24px;
+  z-index: 50;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--ud-on-primary);
+  cursor: pointer;
+}
+.ud-fab.ud-sketch:active {
+  --ud-so: 0px;
+  transform: translate(2px, 2px);
+}
+
+/* ---------- Editor top-right slot (§6.3) -------------------------------- */
+
+.ud-topright {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  pointer-events: auto;
+}
+
+.ud-title {
+  max-width: 240px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ud-ink);
+  font-family: var(--ud-font-ui);
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: text;
+}
+.ud-title:hover {
+  background: var(--ud-primary-soft);
+}
+.ud-title-input {
+  width: 220px;
+  padding: 6px 8px;
+  border: 0;
+  border-bottom: 2px solid var(--ud-primary);
+  background: var(--ud-surface);
+  color: var(--ud-ink);
+  font-family: var(--ud-font-ui);
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 600;
+}
+
+/* Save-status pill (§9.1): 36 px tall, like Excalidraw's toolbar buttons. */
+.ud-pill-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.ud-pill.ud-sketch {
+  --ud-sketch-fill: var(--ud-surface);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  min-width: 36px;
+  padding: 0 10px;
+  color: var(--ud-ink-muted);
+  font-family: var(--ud-font-ui);
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: opacity 150ms ease-out;
+}
+.ud-pill.ud-sketch > .ud-sketch__art {
+  color: var(--ud-ink-faint);
+}
+.ud-pill-wrap[data-status="offline"] .ud-pill {
+  color: var(--ud-ink);
+}
+.ud-pill--danger.ud-sketch {
+  color: var(--ud-danger);
+}
+.ud-pill__text {
+  animation: ud-fade-in 150ms ease-out;
+}
+.ud-pill__retry {
+  padding: 4px 2px;
+  border: 0;
+  background: none;
+  color: var(--ud-danger);
+  font-family: var(--ud-font-ui);
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+/* Plain text actions (share page). */
+.ud-textbtn {
+  padding: 6px 4px;
+  border: 0;
+  background: none;
+  color: var(--ud-ink);
+  font-family: var(--ud-font-ui);
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.ud-textbtn--primary {
+  color: var(--ud-primary);
+}
+
+/* Share view banner: a floating sticky note, top center (§6.4). */
+.ud-share-banner.ud-sketch {
+  --ud-sketch-fill: var(--ud-highlight);
+  --ud-so: 2px;
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(520px, calc(100vw - 32px));
+  padding: 8px 14px;
+  color: var(--ud-note-ink);
+  font-family: var(--ud-font-ui);
+  font-size: 14px;
+  line-height: 20px;
+  transform: translateX(-50%) rotate(-0.5deg);
+  pointer-events: none;
+}
+@media (max-width: 639px) {
+  .ud-share-banner.ud-sketch {
+    top: auto;
+    bottom: 76px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ud-share-banner.ud-sketch {
+    transform: translateX(-50%);
+  }
+}

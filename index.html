@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Uncle Draw</title>
+    <meta name="description" content="Sketch it out. Uncle Draw keeps it safe." />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="preload" href="/src/assets/fonts/excalifont-latin.woff2" as="font" type="font/woff2" crossorigin />
+    <script>
+      // Apply the theme before first paint (SET-1). Mirrors src/app/theme.tsx.
+      (function () {
+        var setting = "system";
+        try {
+          var v = localStorage.getItem("ud:theme");
+          if (v === "light" || v === "dark" || v === "system") setting = v;
+        } catch (e) {}
+        var dark =
+          setting === "dark" ||
+          (setting === "system" && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
+        document.documentElement.dataset.theme = dark ? "dark" : "light";
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

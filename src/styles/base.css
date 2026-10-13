@@ -1,0 +1,91 @@
+/* Minimal base styles. Global rules only touch html/body; element resets are
+ * scoped to `.ud-shell` so they never reach inside `.excalidraw`. */
+@layer base {
+  html,
+  body {
+    margin: 0;
+    min-height: 100%;
+  }
+
+  body {
+    background: var(--ud-paper);
+    color: var(--ud-ink);
+    font-family: var(--ud-font-ui);
+    font-size: 16px;
+    line-height: 24px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  #root {
+    min-height: 100dvh;
+  }
+
+  .ud-shell,
+  .ud-shell *,
+  .ud-shell *::before,
+  .ud-shell *::after {
+    box-sizing: border-box;
+  }
+
+  .ud-shell :where(h1, h2, h3, h4, p, ul, ol, figure, dl, dd) {
+    margin: 0;
+  }
+
+  .ud-shell :where(ul, ol) {
+    padding: 0;
+    list-style: none;
+  }
+
+  .ud-shell :where(button) {
+    font: inherit;
+    color: inherit;
+    background: none;
+    border: 0;
+    padding: 0;
+    margin: 0;
+    cursor: pointer;
+  }
+
+  .ud-shell :where(input, textarea) {
+    font: inherit;
+    color: inherit;
+    margin: 0;
+  }
+
+  .ud-shell :where(a) {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .ud-shell :where(img, svg) {
+    vertical-align: middle;
+  }
+
+  .ud-shell :where(kbd, code) {
+    font-family: var(--ud-font-mono);
+    font-size: 13px;
+    line-height: 20px;
+  }
+}
+
+/* Dot-grid background for /boards, /login and 404 (§5.3 Backgrounds). The
+ * 20 px spacing matches Excalidraw's default grid size. */
+.ud-dot-grid {
+  background-color: var(--ud-paper);
+  background-image: radial-gradient(var(--ud-dot) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+.ud-visually-hidden {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}

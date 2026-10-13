@@ -1,0 +1,41 @@
+/* Unlayered fixes for our components rendered inside Excalidraw's slots
+ * (renderTopRightUI, the share banner). Excalidraw's CSS is unlayered, so its
+ * element rules (`.excalidraw a`, `.excalidraw input:focus-visible`) beat
+ * anything layered; these selectors are specific enough to win back.
+ * Everything else about the components lives in sketch.css. */
+
+.ud-slot.ud-slot {
+  font-family: var(--ud-font-ui);
+  color: var(--ud-ink);
+}
+
+.ud-slot.ud-slot :focus-visible {
+  outline: 2px solid var(--ud-primary);
+  outline-offset: 3px;
+  box-shadow: none;
+}
+
+.ud-slot.ud-slot a.ud-btn {
+  color: inherit;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.ud-slot.ud-slot a.ud-textbtn {
+  color: var(--ud-ink);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.ud-slot.ud-slot a.ud-textbtn--primary {
+  color: var(--ud-primary);
+}
+
+/* "Uncle Draw" in the share banner links home; the banner itself ignores the pointer. */
+.ud-share-banner .ud-share-banner__link {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  pointer-events: auto;
+}
