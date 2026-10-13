@@ -228,6 +228,8 @@ Acceptance:
 - [ ] "Keep my version" overwrites the server version with mine, and autosave resumes.
 - [ ] Covered by an E2E test with two browser contexts.
 
+> **Superseded by COLLAB-2.** A rejected save now merges with the server's copy per element and saves again, with no dialog. Nothing is overwritten silently, and deletions stick (§9).
+
 ### SAVE-5 · Images on boards · v1 · P0
 *As a user, I want to paste or drop screenshots onto a board.*
 - [ ] Paste, drag-and-drop and the image tool all work. Supported types: PNG, JPEG, WebP, GIF and SVG.
@@ -309,9 +311,16 @@ Acceptance:
 
 Specified at a high level now; it gets detailed acceptance criteria when v2 planning starts. The technical groundwork is in [TECHNICAL_REQUIREMENTS.md](./TECHNICAL_REQUIREMENTS.md) §15.
 
+**Built:** COLLAB-1…4. COLLAB-1 shipped as an **edit link** instead of email invites (decided 2026-10-13, because the built-in Supabase mailer allows only a few emails an hour):
+- The owner creates an edit link in the share dialog, next to the view-only link. Copy, "Get a new link" and "Turn off" work like the view link.
+- Anyone who opens it and signs in becomes an **editor**. The board shows up on their dashboard as "Shared with you".
+- Editors draw, add images and see everyone live. Only the owner renames, trashes, shares or manages people.
+- The share dialog lists everyone who can edit. The owner can remove editors; editors can leave.
+- There is no Viewer role yet. The view-only share link (SHARE-1) covers read-only access.
+
 | ID | Feature | Notes |
 |---|---|---|
-| COLLAB-1 | **Invite editors by email** | Owner invites people as Editor or Viewer. Invitees get a magic-link email. Membership is listed in the share dialog. |
+| COLLAB-1 | **Invite editors** | Built as an edit link (above). Email invites as Editor or Viewer remain possible later, once custom SMTP is set up. |
 | COLLAB-2 | **Real-time co-editing** | Several people edit at once and see each other's changes in under 300 ms. Conflicting edits merge per element (Excalidraw's reconcile). Undo affects only my own changes. |
 | COLLAB-3 | **Live cursors and presence** | Named, colored cursors on the canvas. Avatars of everyone present in the top-right. Idle and away states. |
 | COLLAB-4 | **Follow mode** | Click an avatar to follow that person's viewport. |

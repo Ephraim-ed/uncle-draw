@@ -1,4 +1,4 @@
-import { hashElementsVersion, restoreAppState } from "@excalidraw/excalidraw";
+import { restoreAppState } from "@excalidraw/excalidraw";
 import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
 import { useCallback, useEffect, useState } from "react";
 import { cacheKeys, isCacheAvailable, readCache, removeCache } from "../../lib/localCache";
@@ -19,13 +19,15 @@ import {
   type BoardFileRow,
   type BoardRow,
 } from "./editor.api";
-import { pickDbAppState, restoreScene, sceneFingerprint, type DbAppState } from "./serialize";
+import { elementsKey, pickDbAppState, restoreScene, sceneFingerprint, type DbAppState } from "./serialize";
 
 export interface ReadyBoard {
   board: BoardRow;
   fileRows: BoardFileRow[];
   elements: readonly ExcalidrawElement[];
   dbAppState: DbAppState;
+  /** The scene as the server has it (differs from `elements` after a recovery restore). */
+  serverElements: readonly ExcalidrawElement[];
   viewport: Viewport | undefined;
   prefs: Prefs | undefined;
   cacheAvailable: boolean;
@@ -41,7 +43,7 @@ export type BoardLoadState =
   | {
       kind: "recovery";
       backup: LocalBackup;
-      base: Omit<ReadyBoard, "elements" | "dbAppState" | "baselineFingerprint">;
+      base: Omit<ReadyBoard, "elements" | "dbAppState" | "baselineFingerprint" | "serverElements">;
     }
   | { kind: "ready"; data: ReadyBoard };
 
@@ -95,8 +97,7 @@ export function useBoardLoad(boardId: string | undefined, userId: string) {
         if (
           backup &&
           localIsNewer &&
-          hashElementsVersion(backup.elements as unknown as ExcalidrawElement[]) !==
-            hashElementsVersion(serverElements)
+          elementsKey(backup.elements as unknown as ExcalidrawElement[]) !== elementsKey(serverElements)
         ) {
           return settle({ kind: "recovery", backup, base });
         }
@@ -104,7 +105,13 @@ export function useBoardLoad(boardId: string | undefined, userId: string) {
         const { elements, dbAppState } = restoreScene(board.scene.elements, board.app_state);
         settle({
           kind: "ready",
-          data: { ...base, elements, dbAppState, baselineFingerprint: fingerprintFor(elements, dbAppState) },
+          data: {
+            ...base,
+            elements,
+            dbAppState,
+            serverElements: elements,
+            baselineFingerprint: fingerprintFor(elements, dbAppState),
+          },
         });
       } catch (e) {
         // A malformed id or a row RLS hides both read as "not found".
@@ -136,23 +143,33 @@ export function useBoardLoad(boardId: string | undefined, userId: string) {
       setResult((r) => {
         if (!r || r.state.kind !== "recovery") return r;
         const { base, backup } = r.state;
+        const server = restoreScene(base.board.scene.elements, base.board.app_state);
         if (restoreLocal) {
           const { elements, dbAppState } = restoreScene(backup.elements, backup.appState);
           return {
             key: r.key,
-            state: { kind: "ready", data: { ...base, elements, dbAppState, baselineFingerprint: null } },
+            state: {
+              kind: "ready",
+              data: {
+                ...base,
+                elements,
+                dbAppState,
+                serverElements: server.elements,
+                baselineFingerprint: null,
+              },
+            },
           };
         }
-        const { elements, dbAppState } = restoreScene(base.board.scene.elements, base.board.app_state);
         return {
           key: r.key,
           state: {
             kind: "ready",
             data: {
               ...base,
-              elements,
-              dbAppState,
-              baselineFingerprint: fingerprintFor(elements, dbAppState),
+              elements: server.elements,
+              dbAppState: server.dbAppState,
+              serverElements: server.elements,
+              baselineFingerprint: fingerprintFor(server.elements, server.dbAppState),
             },
           },
         };

@@ -6,6 +6,7 @@ import {
   type InfiniteData,
 } from "@tanstack/react-query";
 import { useAuth } from "../auth/AuthProvider";
+import { removePerson } from "../share/collab.api";
 import {
   PAGE_SIZE,
   createBoard,
@@ -79,6 +80,28 @@ export function useTrashBoard() {
   const key = boardsKey(user?.id ?? "none");
   return useMutation({
     mutationFn: (id: string) => trashBoard(id),
+    onMutate: async (id) => {
+      await qc.cancelQueries({ queryKey: key });
+      const previous = qc.getQueryData<Pages>(key);
+      qc.setQueryData<Pages>(key, (data) =>
+        mapBoards(data, (pages) => pages.map((p) => p.filter((b) => b.id !== id))),
+      );
+      return { previous };
+    },
+    onError: (_err, _id, ctx) => {
+      if (ctx?.previous) qc.setQueryData(key, ctx.previous);
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: key }),
+  });
+}
+
+/** An editor leaves a board shared with them (COLLAB-1). */
+export function useLeaveBoard() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  const key = boardsKey(user?.id ?? "none");
+  return useMutation({
+    mutationFn: (id: string) => removePerson(id, user!.id),
     onMutate: async (id) => {
       await qc.cancelQueries({ queryKey: key });
       const previous = qc.getQueryData<Pages>(key);

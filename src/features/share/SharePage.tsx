@@ -49,7 +49,8 @@ async function fetchSharedBoard(token: string): Promise<LoadState> {
   const parsed = sharedBoardSchema.safeParse(data);
   if (!parsed.success) return { kind: "error" };
   const { elements } = restoreScene(parsed.data.scene.elements, parsed.data.app_state);
-  return { kind: "ready", board: parsed.data, elements };
+  // Boards keep recently deleted elements for merging (tech §15); viewers never need them.
+  return { kind: "ready", board: parsed.data, elements: elements.filter((el) => !el.isDeleted) };
 }
 
 /** Revoked, expired, unknown or trashed: all the same page (SHARE-2). */

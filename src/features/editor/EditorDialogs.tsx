@@ -60,51 +60,6 @@ export function RenameDialog({
   );
 }
 
-/** Save conflict (SAVE-4; VISUAL_DESIGN.md §9.2). Autosave is paused until a choice is made. */
-export function ConflictDialog({
-  open,
-  busy,
-  onLoadLatest,
-  onKeepMine,
-}: {
-  open: boolean;
-  busy: boolean;
-  onLoadLatest: () => void;
-  onKeepMine: () => void;
-}) {
-  const latestRef = useRef<HTMLButtonElement>(null);
-  return (
-    <SketchDialog
-      open={open}
-      onClose={() => undefined}
-      dismissible={false}
-      title="This board was changed somewhere else."
-      seedKey="conflict"
-      initialFocusRef={latestRef}
-      footer={
-        <>
-          <SketchButton onClick={onKeepMine} disabled={busy}>
-            Keep my version
-          </SketchButton>
-          <SketchButton ref={latestRef} variant="primary" onClick={onLoadLatest} disabled={busy}>
-            Load the latest
-          </SketchButton>
-        </>
-      }
-    >
-      <p>Maybe in another tab or on another device. Autosave is paused until you choose.</p>
-      <ul className="flex flex-col gap-1 text-ink-muted">
-        <li>
-          <strong className="text-ink">Load the latest</strong> replaces your canvas with the saved version.
-        </li>
-        <li>
-          <strong className="text-ink">Keep my version</strong> overwrites the saved version with yours.
-        </li>
-      </ul>
-    </SketchDialog>
-  );
-}
-
 /** Local recovery prompt (SAVE-3; VISUAL_DESIGN.md §9.2). */
 export function RecoveryDialog({
   savedAt,

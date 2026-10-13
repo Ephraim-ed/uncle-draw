@@ -27,7 +27,7 @@ import { SaveStatusPill } from "../features/editor/SaveStatusPill";
 import type { SaveStatus } from "../features/editor/saveQueue";
 import { useDocumentTitle } from "../lib/useDocumentTitle";
 
-const STATUSES: SaveStatus[] = ["saved", "saving", "offline", "error", "conflict"];
+const STATUSES: SaveStatus[] = ["saved", "saving", "offline", "error"];
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (

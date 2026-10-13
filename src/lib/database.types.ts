@@ -5,7 +5,27 @@ export type Database = {
   
   "public": {
           Tables: {
-            "board_files": {
+            "board_edit_links": {
+                  Row: {
+                    "board_id": string,"created_at": string,"created_by": string,"id": string,"revoked_at": string | null,"token": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "board_id": string,"created_at"?: string,"created_by"?: string,"id"?: string,"revoked_at"?: string | null,"token": string
+                  }
+                  Update: {
+                    "board_id"?: string,"created_at"?: string,"created_by"?: string,"id"?: string,"revoked_at"?: string | null,"token"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "board_edit_links_board_id_fkey"
+      columns: ["board_id"]
+isOneToOne: false
+      referencedRelation: "boards"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"board_files": {
                   Row: {
                     "board_id": string,"created_at": string,"file_id": string,"mime_type": string,"owner_id": string,"size_bytes": number,"storage_path": string
                   }
@@ -19,6 +39,26 @@ export type Database = {
                   Relationships: [
                     {
       foreignKeyName: "board_files_board_id_fkey"
+      columns: ["board_id"]
+isOneToOne: false
+      referencedRelation: "boards"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"board_members": {
+                  Row: {
+                    "board_id": string,"created_at": string,"role": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "board_id": string,"created_at"?: string,"role"?: string,"user_id": string
+                  }
+                  Update: {
+                    "board_id"?: string,"created_at"?: string,"role"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "board_members_board_id_fkey"
       columns: ["board_id"]
 isOneToOne: false
       referencedRelation: "boards"
@@ -93,7 +133,42 @@ isOneToOne: false
             [_ in never]: never
           }
           Functions: {
-            "rotate_board_share":
+            "board_id_from_topic":
+{ Args: { "p_topic": string }; Returns: string
+                           },
+"board_people":
+{ Args: { "p_board_id": string }; Returns: {
+              "avatar_url": string,"display_name": string,"joined_at": string,"role": string,"user_id": string
+            }[]
+                           },
+"can_edit_board":
+{ Args: { "p_board_id": string }; Returns: boolean
+                           },
+"is_board_member":
+{ Args: { "p_board_id": string }; Returns: boolean
+                           },
+"is_board_owner":
+{ Args: { "p_board_id": string }; Returns: boolean
+                           },
+"join_board":
+{ Args: { "p_token": string }; Returns: string
+                           },
+"rotate_board_edit_link":
+{ Args: { "p_board_id": string,"p_token": string }; Returns: {
+              "board_id": string,
+"created_at": string,
+"created_by": string,
+"id": string,
+"revoked_at": string | null,
+"token": string
+            }
+                          SetofOptions: {
+        from: "*"
+        to: "board_edit_links"
+        isOneToOne: true
+        isSetofReturn: false
+      } },
+"rotate_board_share":
 { Args: { "p_board_id": string,"p_token": string }; Returns: {
               "board_id": string,
 "created_at": string,
@@ -112,6 +187,9 @@ isOneToOne: false
       } },
 "save_board":
 { Args: { "p_app_state": Json,"p_board_id": string,"p_expected_version": number,"p_scene": Json }; Returns: number
+                           },
+"set_board_thumbnail":
+{ Args: { "p_board_id": string,"p_path"?: string }; Returns: undefined
                            }
           }
           Enums: {

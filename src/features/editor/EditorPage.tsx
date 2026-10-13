@@ -36,13 +36,14 @@ import { useDocumentTitle } from "../../lib/useDocumentTitle";
 import { useMediaQuery } from "../../lib/useMediaQuery";
 import { NotFoundPage } from "../../pages/NotFoundPage";
 import { useUser } from "../auth/AuthProvider";
+import { useProfile } from "../auth/profile";
 import { renameBoard } from "../boards/boards.api";
 import { boardsKey } from "../boards/boards.queries";
 import { ShareDialog } from "../share/ShareDialog";
 import { BoardTitle } from "./BoardTitle";
 import { EMBED_ALLOW_LIST, HAND_DRAWN_DEFAULTS } from "./constants";
 import { loadBoardFiles } from "./editor.api";
-import { ConflictDialog, RecoveryDialog, RenameDialog } from "./EditorDialogs";
+import { RecoveryDialog, RenameDialog } from "./EditorDialogs";
 import { EditorSession, prefsKey } from "./EditorSession";
 import { SaveStatusPill } from "./SaveStatusPill";
 import { registerFlush } from "./saveRegistry";
@@ -66,7 +67,8 @@ interface EditorUi {
   session: EditorSession;
   title: string;
   cacheAvailable: boolean;
-  rename: (title: string) => void;
+  /** Null for editors: only the owner renames (COLLAB-1). */
+  rename: ((title: string) => void) | null;
   openShare: () => void;
 }
 
@@ -79,7 +81,7 @@ function EditorTopRight({ isMobile }: { isMobile: boolean }) {
   const wide = useMediaQuery("(min-width: 1024px)");
   return (
     <div className="ud-slot ud-topright">
-      {wide && !isMobile ? <BoardTitle title={ui.title} onRename={ui.rename} /> : null}
+      {wide && !isMobile ? <BoardTitle title={ui.title} onRename={ui.rename ?? undefined} /> : null}
       <SaveStatusPill
         status={status.status}
         nonce={status.nonce}
@@ -101,35 +103,13 @@ function EditorTopRight({ isMobile }: { isMobile: boolean }) {
   );
 }
 
-/** Opens the conflict dialog whenever autosave reports a conflict (SAVE-4). */
-function ConflictGate({ session }: { session: EditorSession }) {
-  const state = useSyncExternalStore(session.subscribe, session.getState);
-  const { toast } = useToast();
-  const [busy, setBusy] = useState(false);
-  const run = (fn: () => Promise<void>) => async () => {
-    setBusy(true);
-    try {
-      await fn();
-    } catch {
-      toast({ message: "Hmm, that didn't work. Check your connection and try again." });
-    } finally {
-      setBusy(false);
-    }
-  };
-  return (
-    <ConflictDialog
-      open={state.status === "conflict"}
-      busy={busy}
-      onLoadLatest={run(() => session.loadLatest())}
-      onKeepMine={run(() => session.keepMine())}
-    />
-  );
-}
-
 // --- The editor ----------------------------------------------------------------
 
 function BoardEditor({ data, onGone }: { data: ReadyBoard; onGone: () => void }) {
   const user = useUser();
+  const profile = useProfile();
+  const isOwner = data.board.owner_id === user.id;
+  const [peers, setPeers] = useState(0);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -172,6 +152,8 @@ function BoardEditor({ data, onGone }: { data: ReadyBoard; onGone: () => void })
         boardId,
         initialVersion: data.board.version,
         baselineFingerprint: data.baselineFingerprint,
+        serverElements: data.serverElements,
+        serverAppState: data.board.app_state,
         knownFileIds: data.fileRows.map((r) => r.file_id),
         initialTheme,
         initialPrefsKey: prefsKey(initialAppState as Partial<AppState>),
@@ -186,7 +168,7 @@ function BoardEditor({ data, onGone }: { data: ReadyBoard; onGone: () => void })
     () => ({
       elements: data.elements as ExcalidrawElement[],
       appState: initialAppState as ExcalidrawInitialDataState["appState"],
-      scrollToContent: !data.viewport && data.elements.length > 0,
+      scrollToContent: !data.viewport && data.elements.some((el) => !el.isDeleted),
     }),
     [data, initialAppState],
   );
@@ -201,6 +183,7 @@ function BoardEditor({ data, onGone }: { data: ReadyBoard; onGone: () => void })
   useLayoutEffect(() => {
     if (leaveTimer.current) clearTimeout(leaveTimer.current);
     leaveTimer.current = null;
+    session.resume();
     return () => {
       const finish = session.beginLeave();
       leaveTimer.current = setTimeout(() => void finish().then(refreshDashboard), 0);
@@ -240,6 +223,25 @@ function BoardEditor({ data, onGone }: { data: ReadyBoard; onGone: () => void })
       window.removeEventListener("keydown", onKeyDown, true);
     };
   }, [session]);
+
+  // Live collaboration (COLLAB-2…4): join the board's channel once Excalidraw is ready.
+  const identity = useMemo(
+    () => ({
+      userId: user.id,
+      name: profile?.displayName ?? user.email?.split("@")[0] ?? "Someone",
+      avatarUrl: profile?.avatarUrl ?? null,
+    }),
+    [user.id, user.email, profile?.displayName, profile?.avatarUrl],
+  );
+  const identityRef = useRef(identity);
+  useEffect(() => {
+    identityRef.current = identity;
+    session.setIdentity(identity);
+  }, [session, identity]);
+  useEffect(() => {
+    if (!api) return;
+    return session.startCollab(api, { identity: identityRef.current, onPeersChange: setPeers });
+  }, [api, session]);
 
   // Images: signed URLs → data URLs → addFiles. Placeholders show until then.
   useEffect(() => {
@@ -282,7 +284,7 @@ function BoardEditor({ data, onGone }: { data: ReadyBoard; onGone: () => void })
     [session],
   );
 
-  const rename = useCallback(
+  const renameBoardTitle = useCallback(
     (next: string) => {
       const previous = title;
       setTitle(next);
@@ -293,6 +295,7 @@ function BoardEditor({ data, onGone }: { data: ReadyBoard; onGone: () => void })
     },
     [boardId, title, refreshDashboard, toast],
   );
+  const rename = isOwner ? renameBoardTitle : null;
 
   const backToBoards = useCallback(() => navigate("/boards"), [navigate]);
 
@@ -322,9 +325,11 @@ function BoardEditor({ data, onGone }: { data: ReadyBoard; onGone: () => void })
           <MainMenu.Item icon={<IconArrowLeft size={16} stroke={1.75} />} onSelect={backToBoards}>
             Back to boards
           </MainMenu.Item>
-          <MainMenu.Item icon={<IconPencil size={16} stroke={1.75} />} onSelect={() => setRenameOpen(true)}>
-            Rename…
-          </MainMenu.Item>
+          {isOwner ? (
+            <MainMenu.Item icon={<IconPencil size={16} stroke={1.75} />} onSelect={() => setRenameOpen(true)}>
+              Rename…
+            </MainMenu.Item>
+          ) : null}
           <MainMenu.Item icon={<IconShare size={16} stroke={1.75} />} onSelect={() => setShareOpen(true)}>
             Share…
           </MainMenu.Item>
@@ -364,7 +369,7 @@ function BoardEditor({ data, onGone }: { data: ReadyBoard; onGone: () => void })
         </WelcomeScreen>
       </>
     ),
-    [backToBoards, saveToFile, setting, setTheme],
+    [backToBoards, saveToFile, setting, setTheme, isOwner],
   );
 
   return (
@@ -374,6 +379,8 @@ function BoardEditor({ data, onGone }: { data: ReadyBoard; onGone: () => void })
           excalidrawAPI={onExcalidrawAPI}
           initialData={initialData}
           onChange={onChange}
+          onPointerUpdate={session.handlePointer}
+          isCollaborating={peers > 0}
           theme={resolved}
           name={title}
           langCode="en"
@@ -384,10 +391,28 @@ function BoardEditor({ data, onGone }: { data: ReadyBoard; onGone: () => void })
           {children}
         </Excalidraw>
       </div>
-      <ConflictGate session={session} />
-      <RenameDialog open={renameOpen} title={title} onClose={() => setRenameOpen(false)} onRename={rename} />
+      {rename ? (
+        <RenameDialog
+          open={renameOpen}
+          title={title}
+          onClose={() => setRenameOpen(false)}
+          onRename={rename}
+        />
+      ) : null}
       {shareOpen ? (
-        <ShareDialog open onClose={() => setShareOpen(false)} boardId={boardId} title={title} />
+        <ShareDialog
+          open
+          onClose={() => setShareOpen(false)}
+          boardId={boardId}
+          title={title}
+          isOwner={isOwner}
+          onLeft={() => {
+            setShareOpen(false);
+            refreshDashboard();
+            toast({ message: `You left "${title}".` });
+            navigate("/boards");
+          }}
+        />
       ) : null}
     </EditorUiContext.Provider>
   );
@@ -396,7 +421,7 @@ function BoardEditor({ data, onGone }: { data: ReadyBoard; onGone: () => void })
 // --- Route component -----------------------------------------------------------------
 
 /** "This board is in the trash" with Restore (DASH-4). */
-function TrashedBoard({ title, onRestore }: { title: string; onRestore: () => Promise<void> }) {
+function TrashedBoard({ title, onRestore }: { title: string; onRestore: (() => Promise<void>) | null }) {
   useDocumentTitle(title);
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -406,27 +431,32 @@ function TrashedBoard({ title, onRestore }: { title: string; onRestore: () => Pr
       title="This board is in the trash."
       actions={
         <>
-          <SketchButton
-            variant="primary"
-            disabled={busy}
-            onClick={async () => {
-              setBusy(true);
-              setFailed(false);
-              try {
-                await onRestore();
-              } catch {
-                setFailed(true);
-                setBusy(false);
-              }
-            }}
-          >
-            Restore
-          </SketchButton>
+          {onRestore ? (
+            <SketchButton
+              variant="primary"
+              disabled={busy}
+              onClick={async () => {
+                setBusy(true);
+                setFailed(false);
+                try {
+                  await onRestore();
+                } catch {
+                  setFailed(true);
+                  setBusy(false);
+                }
+              }}
+            >
+              Restore
+            </SketchButton>
+          ) : null}
           <SketchLinkButton to="/boards">Back to boards</SketchLinkButton>
         </>
       }
     >
-      <p>&ldquo;{title}&rdquo; was moved to the trash. Restore it to keep drawing.</p>
+      <p>
+        &ldquo;{title}&rdquo; was moved to the trash.{" "}
+        {onRestore ? "Restore it to keep drawing." : "Only its owner can restore it."}
+      </p>
       {failed ? (
         <p className="mt-2 text-danger" role="alert">
           Hmm, that didn&apos;t work. Try again.
@@ -465,7 +495,12 @@ export default function EditorPage() {
         </FullPageMessage>
       );
     case "trashed":
-      return <TrashedBoard title={state.board.title} onRestore={restoreFromTrash} />;
+      return (
+        <TrashedBoard
+          title={state.board.title}
+          onRestore={state.board.owner_id === user.id ? restoreFromTrash : null}
+        />
+      );
     case "recovery":
       return (
         <>

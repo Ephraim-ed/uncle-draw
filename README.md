@@ -1,6 +1,6 @@
 # Uncle Draw
 
-A hand-drawn whiteboard: the open-source [Excalidraw](https://github.com/excalidraw/excalidraw) editor embedded in a React app, with accounts, a board dashboard, autosave and read-only share links on **Supabase**.
+A hand-drawn whiteboard: the open-source [Excalidraw](https://github.com/excalidraw/excalidraw) editor embedded in a React app, with accounts, a board dashboard, autosave, read-only share links and live collaboration on **Supabase**.
 
 The specs live in [`docs/`](./docs):
 
@@ -8,7 +8,7 @@ The specs live in [`docs/`](./docs):
 - [TECHNICAL_REQUIREMENTS.md](./docs/TECHNICAL_REQUIREMENTS.md): how it works
 - [VISUAL_DESIGN.md](./docs/VISUAL_DESIGN.md): how it looks
 
-This repository implements **v1** (all P0 and P1 features).
+This repository implements **v1** (all P0 and P1 features) and v2's **live collaboration** (COLLAB-1…4): an edit link, real-time co-editing, cursors and presence, and follow mode. Version history and comments (HIST-1, CMT-1) aren't built yet.
 
 ## Stack
 
@@ -48,12 +48,13 @@ Without `.env.local`, every route shows a short setup page. The dev-only compone
 ### Option B: local Supabase (Docker)
 
 ```bash
-npx supabase start            # Postgres, Auth, Storage, Functions, Mailpit
+npx supabase start            # Postgres, Auth, Storage, Realtime, Functions, Mailpit
 npx supabase status -o env    # copy API_URL and ANON_KEY into .env.local
 ```
 
 - Magic-link emails land in Mailpit at <http://127.0.0.1:54324>.
 - GitHub sign-in is off locally. `supabase/config.toml` explains how to turn it on.
+- Live collaboration needs Realtime, so don't start the stack with `-x realtime`.
 
 ## Scripts
 
@@ -97,6 +98,8 @@ CI (`.github/workflows/ci.yml`) runs everything on each pull request: lint, type
   - `SUPABASE_ACCESS_TOKEN`
   - `SUPABASE_DB_PASSWORD`
   - `SUPABASE_PROJECT_REF`
+- **Push the database before the frontend.** A new frontend on an old schema still draws and saves, but edit links, live collaboration and thumbnails fail until the migrations are in.
+- **Realtime:** collaboration uses private Realtime channels (`board:{id}`), authorized by RLS policies on `realtime.messages` in the migrations. Nothing needs turning on in the dashboard. Realtime has per-project message limits (about 100 a second on the free plan). Each active editor sends at most about 12 messages a second, batching cursor and edits, and nothing while alone on a board. If many people will draw at the same time, check your plan's limits.
 
 ## Project layout
 
@@ -109,7 +112,8 @@ src/
     auth/       login, magic-link callback, route guard, profile
     boards/     dashboard, cards, queries
     editor/     editor page (lazy), save queue, local backup, file sync, thumbnails
-    share/      share dialog, read-only share page (lazy)
+      collab/   live collaboration: Realtime channel, message protocol, presence
+    share/      share dialog, edit links, join page, read-only share page (lazy)
   lib/          Supabase client, Zod schemas, IndexedDB cache, helpers
   styles/       tokens, fonts, sketch kit, Excalidraw overrides
 supabase/
@@ -125,4 +129,5 @@ e2e/            Playwright specs
 - **No Tailwind preflight.** Its global resets would leak into Excalidraw's UI. A small reset scoped to `.ud-shell` replaces it.
 - **Fonts are self-hosted.** Excalidraw's fonts are copied to `/excalidraw-assets/fonts/` at build time, with `OFL.txt`.
 - **Illustrations are placeholders.** They are deterministic Rough.js drawings (`src/assets/illustrations/`) standing in for versions to be drawn in Uncle Draw itself (VISUAL_DESIGN.md §9.3).
+- **Collaboration saves.** Every editor autosaves through `save_board`. When a save hits a version conflict, the editor loads the server's copy, merges it per element with Excalidraw's `reconcileElements`, and saves the result. This replaces v1's "changed somewhere else" dialog. Deleted elements are kept for 24 hours so a stale copy can't bring them back. A collaborator's live edits are left for them to save; the others only save them as a fallback after 15 s.
 - **Licensing.** See [THIRD_PARTY_LICENSES.md](./THIRD_PARTY_LICENSES.md). The About dialog (avatar menu) shows the same notices.

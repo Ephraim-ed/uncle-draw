@@ -39,10 +39,11 @@ jobs:
         with:
           version: 2.120.0
 
+      # Realtime stays on: the collaboration E2E test needs the board channel.
       - name: Start local Supabase
-        run: supabase start -x studio,imgproxy,vector,logflare,supavisor,realtime
+        run: supabase start -x studio,imgproxy,vector,logflare,supavisor
 
-      - name: Database tests (RLS, save_board, shares)
+      - name: Database tests (RLS, save_board, shares, collaboration)
         run: supabase test db
 
       - name: Generated types match the migrations

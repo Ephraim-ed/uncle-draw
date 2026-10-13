@@ -1,4 +1,4 @@
-import { IconAlertCircle, IconAlertTriangle, IconCheck, IconCloudOff } from "@tabler/icons-react";
+import { IconAlertTriangle, IconCheck, IconCloudOff } from "@tabler/icons-react";
 import { useEffect, useState } from "react";
 import { RoughDrawing, SketchArt, hashSeed } from "../../components/sketch";
 import type { ErrorReason, SaveStatus } from "./saveQueue";
@@ -53,8 +53,6 @@ function label(status: SaveStatus, errorReason: ErrorReason, backupAvailable: bo
       return backupAvailable ? "Offline · saved on this device" : "Offline · will sync when you're back";
     case "error":
       return errorReason === "tooLarge" ? "Too big to save · keeping a copy here" : "Couldn't save";
-    case "conflict":
-      return "Changed elsewhere";
   }
 }
 
@@ -83,7 +81,7 @@ export function SaveStatusPill({
 
   const text = label(status, errorReason, backupAvailable);
   const showText = !iconOnly && !(status === "saved" && collapsed);
-  const danger = status === "error" || status === "conflict";
+  const danger = status === "error";
 
   const icon =
     status === "saved" ? (
@@ -92,10 +90,8 @@ export function SaveStatusPill({
       <SavingScribble />
     ) : status === "offline" ? (
       <IconCloudOff size={18} stroke={1.75} className="text-warning" />
-    ) : status === "error" ? (
-      <IconAlertTriangle size={18} stroke={1.75} />
     ) : (
-      <IconAlertCircle size={18} stroke={1.75} />
+      <IconAlertTriangle size={18} stroke={1.75} />
     );
 
   const body = (

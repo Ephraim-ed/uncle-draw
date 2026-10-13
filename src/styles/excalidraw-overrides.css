@@ -23,3 +23,12 @@
   height: 100dvh;
   width: 100%;
 }
+
+/* Collaborator avatars (COLLAB-3). Excalidraw sizes the list from its own
+   width; next to our top-right slot it would shrink and fold everyone into
+   "+N". Room for four avatars before that happens. */
+.excalidraw .layer-ui__wrapper__top-right .UserList__wrapper {
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 156px;
+}

@@ -11,7 +11,6 @@ describe("SaveStatusPill (SAVE-2; VISUAL_DESIGN.md §9.1)", () => {
   it.each([
     ["saved", "Saved"],
     ["offline", "Offline · saved on this device"],
-    ["conflict", "Changed elsewhere"],
     ["error", "Couldn't save"],
   ] as const)('%s reads "%s" and is announced politely', (status, text) => {
     render(

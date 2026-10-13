@@ -37,6 +37,25 @@ export const SAVE_DEBOUNCE_MS = 1500;
 export const SAVE_MAX_WAIT_MS = 10_000;
 export const RETRY_MIN_MS = 2000;
 export const RETRY_MAX_MS = 30_000;
+/**
+ * A collaborator's change is saved by them; we save it ourselves only if
+ * their save hasn't shown up by then (it must outlast SAVE_MAX_WAIT_MS).
+ */
+export const REMOTE_SAVE_DELAY_MS = 15_000;
+
+/** Deleted elements are kept this long so a stale peer can't bring them back (tech §15). */
+export const TOMBSTONE_TTL_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Live collaboration (COLLAB-2/3). One message per tick carries pointer,
+ * selection and changed elements, which keeps two busy editors well inside
+ * Supabase Realtime's free-plan message rate.
+ */
+export const COLLAB_TICK_MS = 80;
+/** Broadcast payloads are capped at 256 KB; big batches are split well below that. */
+export const COLLAB_CHUNK_BYTES = 100_000;
+/** No pointer or keyboard activity for this long shows a collaborator as idle. */
+export const COLLAB_IDLE_MS = 60_000;
 
 /** Local writes are throttled so freehand drawing stays within budget (tech §10). */
 export const LOCAL_WRITE_THROTTLE_MS = 250;

@@ -6,18 +6,20 @@ import { Wordmark } from "../../brand/Wordmark";
 import { SketchArt, SketchBox, SketchButton, hashSeed, useToast } from "../../components/sketch";
 import { AvatarMenu } from "../../components/ui/AvatarMenu";
 import { useDocumentTitle } from "../../lib/useDocumentTitle";
+import { useUser } from "../auth/AuthProvider";
 import { ShareDialog } from "../share/ShareDialog";
 import type { BoardSummary } from "./boards.api";
 import {
   useBoardsList,
   useCreateBoard,
+  useLeaveBoard,
   useRenameBoard,
   useRestoreBoard,
   useThumbnailUrls,
   useTrashBoard,
 } from "./boards.queries";
 import { BoardCard } from "./BoardCard";
-import { TrashConfirmDialog } from "./TrashConfirmDialog";
+import { LeaveConfirmDialog, TrashConfirmDialog } from "./TrashConfirmDialog";
 
 const GRID =
   "grid grid-cols-1 gap-6 tablet:grid-cols-[repeat(auto-fill,minmax(220px,1fr))] desktop:grid-cols-[repeat(auto-fill,minmax(240px,1fr))]";
@@ -28,9 +30,11 @@ function isTypingTarget(el: EventTarget | null): boolean {
 }
 
 interface CardActions {
+  userId: string;
   onRename: (board: BoardSummary, title: string) => void;
   onShare: (board: BoardSummary) => void;
   onTrash: (board: BoardSummary) => void;
+  onLeave: (board: BoardSummary) => void;
 }
 
 /** One page of cards, so thumbnail URLs are signed in one batch per page (tech §7.5). */
@@ -43,9 +47,11 @@ function BoardPage({ boards, actions }: { boards: BoardSummary[]; actions: CardA
           <BoardCard
             board={board}
             thumbnailUrl={board.thumbnail_path ? thumbs.data?.[board.thumbnail_path] : undefined}
+            shared={board.owner_id !== actions.userId}
             onRename={(title) => actions.onRename(board, title)}
             onShare={() => actions.onShare(board)}
             onTrash={() => actions.onTrash(board)}
+            onLeave={() => actions.onLeave(board)}
           />
         </li>
       ))}
@@ -75,14 +81,17 @@ function SkeletonGrid() {
 export function DashboardPage() {
   useDocumentTitle("Your boards");
   const navigate = useNavigate();
+  const user = useUser();
   const { toast } = useToast();
   const list = useBoardsList();
+  const leave = useLeaveBoard();
   const create = useCreateBoard();
   const rename = useRenameBoard();
   const trash = useTrashBoard();
   const restore = useRestoreBoard();
   const [sharing, setSharing] = useState<BoardSummary | null>(null);
   const [confirmTrash, setConfirmTrash] = useState<BoardSummary | null>(null);
+  const [confirmLeave, setConfirmLeave] = useState<BoardSummary | null>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
 
   const newBoard = useCallback(() => {
@@ -122,6 +131,7 @@ export function DashboardPage() {
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   const actions: CardActions = {
+    userId: user.id,
     onRename: (board, title) =>
       rename.mutate(
         { id: board.id, title },
@@ -129,6 +139,15 @@ export function DashboardPage() {
       ),
     onShare: (board) => setSharing(board),
     onTrash: (board) => setConfirmTrash(board),
+    onLeave: (board) => setConfirmLeave(board),
+  };
+
+  const doLeave = (board: BoardSummary) => {
+    setConfirmLeave(null);
+    leave.mutate(board.id, {
+      onSuccess: () => toast({ message: `You left "${board.title}".` }),
+      onError: () => toast({ message: "Hmm, we couldn't leave that board. Try again." }),
+    });
   };
 
   const doTrash = (board: BoardSummary) => {
@@ -245,13 +264,30 @@ export function DashboardPage() {
       </button>
 
       {sharing ? (
-        <ShareDialog open onClose={() => setSharing(null)} boardId={sharing.id} title={sharing.title} />
+        <ShareDialog
+          open
+          onClose={() => setSharing(null)}
+          boardId={sharing.id}
+          title={sharing.title}
+          isOwner={sharing.owner_id === user.id}
+          onLeft={() => {
+            setSharing(null);
+            toast({ message: `You left "${sharing.title}".` });
+            void list.refetch();
+          }}
+        />
       ) : null}
       <TrashConfirmDialog
         open={!!confirmTrash}
         title={confirmTrash?.title ?? ""}
         onCancel={() => setConfirmTrash(null)}
         onConfirm={() => confirmTrash && doTrash(confirmTrash)}
+      />
+      <LeaveConfirmDialog
+        open={!!confirmLeave}
+        title={confirmLeave?.title ?? ""}
+        onCancel={() => setConfirmLeave(null)}
+        onConfirm={() => confirmLeave && doLeave(confirmLeave)}
       />
     </div>
   );

@@ -28,6 +28,7 @@ export const appStateSubsetSchema = z.looseObject({
 
 export const boardRowSchema = z.object({
   id: z.string(),
+  owner_id: z.string(),
   title: z.string(),
   scene: sceneSchema,
   app_state: appStateSubsetSchema,

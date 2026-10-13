@@ -58,11 +58,27 @@ describe("serialize (tech §7.2, §14)", () => {
     expect(restored.map((e) => e.seed)).toEqual(elements.map((e) => e.seed));
   });
 
-  it("drops deleted elements (v1 doesn't keep tombstones)", () => {
-    const [first, ...rest] = sampleElements();
-    const deleted = newElementWith(first!, { isDeleted: true });
-    const payload = toDbPayload([deleted, ...rest], {});
-    expect(payload.scene.elements.map((e) => e.id)).toEqual(rest.map((e) => e.id));
+  it("keeps deleted elements for 24 h so stale copies can't revive them (tech §15)", () => {
+    const [first, second, ...rest] = sampleElements();
+    const now = Date.now();
+    const fresh = newElementWith(first!, { isDeleted: true });
+    const old = { ...newElementWith(second!, { isDeleted: true }), updated: now - 25 * 3600_000 };
+    const payload = toDbPayload([fresh, old, ...rest], {}, now);
+    expect(payload.scene.elements.map((e) => e.id)).toEqual([fresh.id, ...rest.map((e) => e.id)]);
+    expect(payload.scene.elements[0]!.isDeleted).toBe(true);
+  });
+
+  it("fingerprints ignore element order and expired tombstones", () => {
+    const els = sampleElements();
+    const now = Date.now();
+    const expired = { ...newElementWith(els[0]!, { isDeleted: true }), updated: now - 25 * 3600_000 };
+    expect(sceneFingerprint([...els].reverse(), {}, now)).toBe(sceneFingerprint(els, {}, now));
+    expect(sceneFingerprint([expired, ...els.slice(1)], {}, now)).toBe(
+      sceneFingerprint(els.slice(1), {}, now),
+    );
+    expect(sceneFingerprint([newElementWith(els[0]!, { x: 999 }), ...els.slice(1)], {}, now)).not.toBe(
+      sceneFingerprint(els, {}, now),
+    );
   });
 
   it("keeps only the board-level appState, never personal UI state", () => {

@@ -13,6 +13,7 @@ import { SetupPage } from "../pages/SetupPage";
 // The Excalidraw bundle stays out of the dashboard's initial load (tech §4.1).
 const EditorPage = lazy(() => import("../features/editor/EditorPage"));
 const SharePage = lazy(() => import("../features/share/SharePage"));
+const JoinPage = lazy(() => import("../features/share/JoinPage"));
 // Dev-only component preview; `import.meta.env.DEV` is false in builds, so the chunk is dropped.
 const KitPage = import.meta.env.DEV ? lazy(() => import("../pages/KitPage")) : null;
 
@@ -52,6 +53,14 @@ export const routes: RouteObject[] = [
                 element: (
                   <Lazy label="Opening your board…">
                     <EditorPage />
+                  </Lazy>
+                ),
+              },
+              {
+                path: "/join/:token",
+                element: (
+                  <Lazy label="Joining the board…">
+                    <JoinPage />
                   </Lazy>
                 ),
               },

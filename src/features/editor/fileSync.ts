@@ -13,6 +13,8 @@ export interface FileSyncOptions {
   knownIds: Iterable<string>;
   upload: (file: BinaryFileData) => Promise<UploadOutcome>;
   onRejected?: (fileId: string) => void;
+  /** Uploaded and recorded: collaborators can fetch it now. */
+  onUploaded?: (fileId: string) => void;
   onIdle?: () => void;
   retryAfterMs?: number;
 }
@@ -75,7 +77,9 @@ export class FileSync {
         } catch {
           outcome = "error";
         }
-        if (outcome === "tooLarge") {
+        if (outcome === "ok") {
+          this.opts.onUploaded?.(file.id);
+        } else if (outcome === "tooLarge") {
           this.opts.onRejected?.(file.id);
         } else if (outcome === "error") {
           // Forget it so a later onChange retries, but not immediately.

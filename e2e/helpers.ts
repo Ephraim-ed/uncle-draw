@@ -101,9 +101,11 @@ export async function saveNow(page: Page) {
 }
 
 /** Reads a board straight from the database with the service-role key. */
-export async function adminGetBoard(
-  id: string,
-): Promise<{ title: string; version: number; scene: { elements: Array<{ type: string; text?: string }> } }> {
+export async function adminGetBoard(id: string): Promise<{
+  title: string;
+  version: number;
+  scene: { elements: Array<{ type: string; text?: string; isDeleted?: boolean }> };
+}> {
   if (!SERVICE_ROLE_KEY) throw new Error("Set SUPABASE_SERVICE_ROLE_KEY (from `supabase status -o env`).");
   const res = await fetch(`${SUPABASE_URL}/rest/v1/boards?id=eq.${id}&select=title,version,scene`, {
     headers: { apikey: SERVICE_ROLE_KEY, Authorization: `Bearer ${SERVICE_ROLE_KEY}` },
@@ -111,7 +113,7 @@ export async function adminGetBoard(
   const rows = (await res.json()) as Array<{
     title: string;
     version: number;
-    scene: { elements: Array<{ type: string; text?: string }> };
+    scene: { elements: Array<{ type: string; text?: string; isDeleted?: boolean }> };
   }>;
   if (!rows[0]) throw new Error(`Board ${id} not found`);
   return rows[0];
@@ -123,4 +125,28 @@ export async function adminCountFiles(boardId: string): Promise<number> {
     headers: { apikey: SERVICE_ROLE_KEY, Authorization: `Bearer ${SERVICE_ROLE_KEY}` },
   });
   return ((await res.json()) as unknown[]).length;
+}
+
+/** Types of the board's live elements in the database (tombstones left out), sorted. */
+export async function adminLiveTypes(boardId: string): Promise<string[]> {
+  const board = await adminGetBoard(boardId);
+  return board.scene.elements
+    .filter((e) => !e.isDeleted)
+    .map((e) => e.type)
+    .sort();
+}
+
+/** Finds `text` with Excalidraw's "Find on canvas" (search is debounced, so this retries). */
+export async function expectTextOnCanvas(page: Page, text: string) {
+  const search = page.locator(".layer-ui__search");
+  if (!(await search.isVisible())) {
+    await page.getByTestId("main-menu-trigger").click();
+    await page.getByTestId("search-menu-button").click();
+  }
+  const input = search.locator("input");
+  await expect(async () => {
+    await input.fill("");
+    await input.fill(text);
+    await expect(search.locator(".layer-ui__search-count")).toContainText("1 result", { timeout: 1500 });
+  }).toPass({ timeout: 15_000 });
 }

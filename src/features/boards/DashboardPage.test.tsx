@@ -13,16 +13,19 @@ vi.mock("./boards.queries", () => ({
   useRenameBoard: () => ({ mutate }),
   useTrashBoard: () => ({ mutate }),
   useRestoreBoard: () => ({ mutate }),
+  useLeaveBoard: () => ({ mutate }),
   useThumbnailUrls: () => ({ data: {} }),
 }));
+vi.mock("../auth/AuthProvider", () => ({ useUser: () => ({ id: "me" }) }));
 vi.mock("../../components/ui/AvatarMenu", () => ({
   AvatarMenu: () => <button type="button">Account</button>,
 }));
 
 const { DashboardPage } = await import("./DashboardPage");
 
-const board = (id: string, title: string): BoardSummary => ({
+const board = (id: string, title: string, owner_id = "me"): BoardSummary => ({
   id,
+  owner_id,
   title,
   thumbnail_path: null,
   updated_at: new Date(Date.now() - 2 * 3600_000).toISOString(),
@@ -85,6 +88,25 @@ describe("DashboardPage (DASH-1; VISUAL_DESIGN.md §6.2)", () => {
     expect(
       within(items[0]!).getByRole("button", { name: "Board options for Sprint map" }),
     ).toBeInTheDocument();
+  });
+
+  it("marks boards shared with me and offers Leave instead of Rename/Trash (COLLAB-1)", async () => {
+    setList({
+      isSuccess: true,
+      data: { pages: [[board("b3", "Team map", "someone-else")]], pageParams: [0] },
+    });
+    renderWithProviders(<DashboardPage />);
+    const item = screen.getByRole("listitem");
+    expect(within(item).getByRole("link")).toHaveTextContent("Shared with you · Edited 2h ago");
+    await userEvent.click(within(item).getByRole("button", { name: "Board options for Team map" }));
+    expect(screen.getByRole("menuitem", { name: "Leave board" })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Rename" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Move to trash" })).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("menuitem", { name: "Leave board" }));
+    const dialog = await screen.findByRole("dialog", { name: 'Leave "Team map"?' });
+    await userEvent.click(within(dialog).getByRole("button", { name: "Leave board" }));
+    expect(mutate).toHaveBeenCalledWith("b3", expect.anything());
   });
 
   it("creates a board with the N shortcut", async () => {

@@ -9,6 +9,7 @@ import type { SaveResult } from "./saveQueue";
 
 export interface BoardRow {
   id: string;
+  owner_id: string;
   title: string;
   scene: { elements: Array<Record<string, unknown>> };
   app_state: Record<string, unknown>;
@@ -33,11 +34,11 @@ export function isBoardId(id: string | undefined): id is string {
 
 export class BoardDataError extends Error {}
 
-/** The board row, validated before it reaches restore(); null if missing or not mine. */
+/** The board row, validated before it reaches restore(); null if missing or not shared with me. */
 export async function fetchBoard(boardId: string): Promise<BoardRow | null> {
   const { data, error } = await supabase
     .from("boards")
-    .select("id, title, scene, app_state, version, updated_at, deleted_at, thumbnail_path")
+    .select("id, owner_id, title, scene, app_state, version, updated_at, deleted_at, thumbnail_path")
     .eq("id", boardId)
     .maybeSingle();
   if (error) throw error;
@@ -56,13 +57,19 @@ export async function fetchBoardFiles(boardId: string): Promise<BoardFileRow[]> 
   return data;
 }
 
-export async function fetchBoardVersion(boardId: string): Promise<number | null> {
-  const { data, error } = await supabase.from("boards").select("version").eq("id", boardId).maybeSingle();
+/** Rows for specific files (images a collaborator just added). */
+export async function fetchBoardFilesByIds(boardId: string, fileIds: string[]): Promise<BoardFileRow[]> {
+  if (fileIds.length === 0) return [];
+  const { data, error } = await supabase
+    .from("board_files")
+    .select("file_id, storage_path, mime_type, created_at")
+    .eq("board_id", boardId)
+    .in("file_id", fileIds);
   if (error) throw error;
-  return data?.version ?? null;
+  return data;
 }
 
-function looksOffline(status: number, message: string | undefined): boolean {
+export function looksOffline(status: number, message: string | undefined): boolean {
   if (typeof navigator !== "undefined" && navigator.onLine === false) return true;
   return (
     status === 0 || /failed to fetch|networkerror|load failed|network request failed/i.test(message ?? "")
@@ -187,20 +194,24 @@ export async function loadBoardFiles(rows: BoardFileRow[]): Promise<BinaryFileDa
   return downloadFiles(signed);
 }
 
+/**
+ * Uploads the preview to my own folder and points the board at it. Editors
+ * render previews too, so this goes through set_board_thumbnail().
+ */
 export async function uploadThumbnail(userId: string, boardId: string, blob: Blob): Promise<void> {
   const path = `${userId}/${boardId}.webp`;
   const { error } = await supabase.storage
     .from("thumbnails")
     .upload(path, blob, { contentType: "image/webp", upsert: true, cacheControl: "60" });
   if (error) throw error;
-  const { error: rowError } = await supabase
-    .from("boards")
-    .update({ thumbnail_path: path })
-    .eq("id", boardId);
+  const { error: rowError } = await supabase.rpc("set_board_thumbnail", {
+    p_board_id: boardId,
+    p_path: path,
+  });
   if (rowError) throw rowError;
 }
 
 export async function clearThumbnail(boardId: string): Promise<void> {
-  const { error } = await supabase.from("boards").update({ thumbnail_path: null }).eq("id", boardId);
+  const { error } = await supabase.rpc("set_board_thumbnail", { p_board_id: boardId });
   if (error) throw error;
 }

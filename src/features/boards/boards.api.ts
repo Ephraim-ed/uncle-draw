@@ -6,15 +6,19 @@ export const DEFAULT_TITLE = "Untitled board";
 
 export interface BoardSummary {
   id: string;
+  owner_id: string;
   title: string;
   thumbnail_path: string | null;
   updated_at: string;
   created_at: string;
 }
 
-const SUMMARY_COLUMNS = "id, title, thumbnail_path, updated_at, created_at";
+const SUMMARY_COLUMNS = "id, owner_id, title, thumbnail_path, updated_at, created_at";
 
-/** My non-deleted boards, newest-edited first, 24 per page (DASH-1). RLS scopes rows to the owner. */
+/**
+ * My non-deleted boards and the ones shared with me (COLLAB-1), newest-edited
+ * first, 24 per page (DASH-1). RLS scopes rows to owner or editor.
+ */
 export async function listBoards(page: number): Promise<BoardSummary[]> {
   const from = page * PAGE_SIZE;
   const { data, error } = await supabase

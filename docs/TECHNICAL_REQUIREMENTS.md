@@ -27,7 +27,7 @@ Hard rule: **never store rendered output** (PNG/SVG) as the source of truth. We 
 - Autosave to Supabase with an offline-safe local backup.
 - Images uploaded to Supabase Storage.
 - Read-only share links.
-- **Not in v1:** real-time multiplayer (planned for v2, see §15).
+- **Not in v1:** real-time multiplayer (built in v2, see §15).
 
 See [FEATURES.md](./FEATURES.md) for the full list with priorities.
 
@@ -468,20 +468,30 @@ CI (GitHub Actions) on every PR:
 
 ---
 
-## 15. v2: multiplayer readiness
+## 15. v2: multiplayer
 
-v1 is single-user, but these choices keep v2 cheap:
+Built (COLLAB-1…4). v1's choices carried over as planned; where the build differs from the original plan, this section says so.
 
-- **Element identity and versioning are already there.** Every Excalidraw element has `id`, `version` and `versionNonce`. v2 merges remote changes with `reconcileElements(local, remote, appState)` and applies them through `api.updateScene({ elements, captureUpdate: CaptureUpdateAction.NEVER })`.
-- **Transport:** a Supabase Realtime channel `board:{boardId}`.
-  - **Broadcast** carries element deltas (changed elements only, throttled to about 20 Hz) and pointer positions (`onPointerUpdate`).
-  - **Presence** feeds Excalidraw's `collaborators` map (name, avatar, color, pointer, selected ids) and sets `isCollaborating`.
-- **Persistence in v2:** one client per board, the oldest in presence, acts as the "saver" and keeps using `save_board`. Everyone else syncs through broadcast. On join, a client loads from the DB and then applies buffered broadcasts.
-- **Schema additions:**
-  - `board_members (board_id, user_id, role in ('editor','viewer'))`, with RLS widened to "owner **or** member".
-  - Channel authorization through Realtime RLS on `realtime.messages`.
-- **Known v1 → v2 change:** v1 saves only non-deleted elements. v2 must **keep tombstones** (`isDeleted: true`) so a deletion can't be undone by a stale peer. Prune tombstones older than 24 h when saving.
-- **Version history (v2):** a `board_snapshots (board_id, version, scene, created_at)` table, filled at most every 10 min while editing.
+- **Access (COLLAB-1, built as an edit link):**
+  - `board_members (board_id, user_id, role)` holds editors. Rows are only created by `join_board(token)`, which validates an active `board_edit_links` token on a board that isn't trashed. A board can have up to 50 editors.
+  - RLS: editors can read the board and its files, and add their own files. They save only through `save_board`, which is now `security definer` and checks `can_edit_board()` itself. That way, editors never get an update policy that would also let them rename, trash or re-own the board.
+  - Owner-only: title, trash, view and edit links, removing members. `board_people()` lists everyone, without opening up `profiles`.
+  - Storage: uploads stay in the uploader's own folder. Collaborators can read an object when a `board_files` row (or `boards.thumbnail_path`) on a board they can edit points at it. Thumbnails are set through `set_board_thumbnail()`.
+- **Transport:** a private Supabase Realtime channel `board:{boardId}`. Realtime RLS on `realtime.messages` lets only the owner and editors listen or send.
+  - **`tick`** messages, at most one per 80 ms, carry everything that changed: elements (version-tracked, so nothing echoes back), pointer, selection, board settings (background, grid), and the visible area for followers. Nothing is sent while you're alone on the board.
+  - **`hello`**: a newcomer, or someone reconnecting, asks for everyone's scene. Peers answer with their whole scene, split into chunks under the payload limit.
+  - **`saved`**, **`files`** and **`follow`** announce a save, a finished image upload, and follow mode.
+  - Every message is checked with Zod, and elements go through `restoreElements()` before `reconcileElements()`. Remote changes are applied with `CaptureUpdateAction.NEVER`, so undo only affects my own changes.
+- **Presence** feeds Excalidraw's `collaborators` map: name, avatar, color (from the user id), pointer, selected ids, and active/idle/away (60 s idle, hidden tab = away). Excalidraw's own UI shows the avatars top-right and the named cursors. Clicking an avatar follows that person: they send their visible bounds while followed, and the follower applies them with `zoomToFitBounds`.
+- **Persistence (changed from the plan):** there's no elected "saver". Every editor saves its own changes through `save_board`.
+  - On a version conflict, the editor fetches the board, merges per element with `reconcileElements`, shows the result, and saves the union.
+  - After a save, the editor announces `saved {version, fingerprint}`. A collaborator whose canvas has exactly that fingerprint adopts the version. Anyone else will merge on their next save, so no client ever saves on top of a version it hasn't merged with.
+  - Changes that arrived from collaborators are saved by their author. Others save them only as a fallback after 15 s.
+  - Fingerprints are independent of element order, so two clients holding the same scene always agree.
+  - This replaces v1's SAVE-4 dialog, and it also covers tabs that can't reach Realtime.
+- **Tombstones:** saves keep deleted elements (`isDeleted: true`) for 24 h, then prune them, so a stale peer's copy can't bring a deletion back. The local backup keeps them too. The read-only share page drops them.
+- **Known limit:** reconcile picks the higher element version. If two offline tabs create elements whose fractional indices collide, Excalidraw re-indexes one of them on merge, which bumps its version. A concurrent delete of that same element can then lose the tie.
+- **Not built yet:** a Viewer role for members, email invites, and version history (HIST-1: `board_snapshots (board_id, version, scene, created_at)`, filled at most every 10 min while editing).
 
 ---
 

@@ -1,4 +1,4 @@
-import { IconDots, IconPencil, IconShare, IconTrash } from "@tabler/icons-react";
+import { IconDoorExit, IconDots, IconPencil, IconShare, IconTrash, IconUsers } from "@tabler/icons-react";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { Link } from "react-router";
 import { RoughDrawing, SketchArt, SketchMenu, hashSeed, type MenuEntry } from "../../components/sketch";
@@ -8,9 +8,12 @@ import { TITLE_MAX, normalizeTitle, type BoardSummary } from "./boards.api";
 export interface BoardCardProps {
   board: BoardSummary;
   thumbnailUrl: string | undefined;
+  /** Someone else's board that I can edit (COLLAB-1). */
+  shared: boolean;
   onRename: (title: string) => void;
   onShare: () => void;
   onTrash: () => void;
+  onLeave: () => void;
 }
 
 /** A blank paper sheet for boards without a thumbnail (DASH-5). */
@@ -57,7 +60,15 @@ function BlankSheet({ seed }: { seed: number }) {
 }
 
 /** Dashboard card (DASH-1, DASH-3; VISUAL_DESIGN.md §6.2). */
-export function BoardCard({ board, thumbnailUrl, onRename, onShare, onTrash }: BoardCardProps) {
+export function BoardCard({
+  board,
+  thumbnailUrl,
+  shared,
+  onRename,
+  onShare,
+  onTrash,
+  onLeave,
+}: BoardCardProps) {
   const seed = hashSeed(board.id);
   const [menuOpen, setMenuOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
@@ -88,18 +99,35 @@ export function BoardCard({ board, thumbnailUrl, onRename, onShare, onTrash }: B
     requestAnimationFrame(() => linkRef.current?.focus());
   };
 
-  const items: MenuEntry[] = [
-    { label: "Rename", icon: <IconPencil size={16} stroke={1.75} />, onSelect: startRename, key: "rename" },
-    { label: "Share", icon: <IconShare size={16} stroke={1.75} />, onSelect: onShare, key: "share" },
-    { type: "separator", key: "sep" },
-    {
-      label: "Move to trash",
-      icon: <IconTrash size={16} stroke={1.75} />,
-      onSelect: onTrash,
-      danger: true,
-      key: "trash",
-    },
-  ];
+  const items: MenuEntry[] = shared
+    ? [
+        { label: "People", icon: <IconUsers size={16} stroke={1.75} />, onSelect: onShare, key: "people" },
+        { type: "separator", key: "sep" },
+        {
+          label: "Leave board",
+          icon: <IconDoorExit size={16} stroke={1.75} />,
+          onSelect: onLeave,
+          danger: true,
+          key: "leave",
+        },
+      ]
+    : [
+        {
+          label: "Rename",
+          icon: <IconPencil size={16} stroke={1.75} />,
+          onSelect: startRename,
+          key: "rename",
+        },
+        { label: "Share", icon: <IconShare size={16} stroke={1.75} />, onSelect: onShare, key: "share" },
+        { type: "separator", key: "sep" },
+        {
+          label: "Move to trash",
+          icon: <IconTrash size={16} stroke={1.75} />,
+          onSelect: onTrash,
+          danger: true,
+          key: "trash",
+        },
+      ];
 
   // Shift+F10 / the context-menu key open the card menu (§10).
   const onKeyDown = (e: KeyboardEvent) => {
@@ -111,7 +139,7 @@ export function BoardCard({ board, thumbnailUrl, onRename, onShare, onTrash }: B
   };
 
   const showImage = !!thumbnailUrl && failedUrl !== thumbnailUrl;
-  const edited = `Edited ${formatRelative(board.updated_at)}`;
+  const edited = `${shared ? "Shared with you · " : ""}Edited ${formatRelative(board.updated_at)}`;
 
   const body = (
     <>
