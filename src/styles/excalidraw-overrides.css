@@ -32,3 +32,9 @@
   width: auto;
   min-width: 156px;
 }
+
+/* Phones: Excalidraw pads its hint text to clear the tool column on the right;
+   clear our save status on the left the same way. */
+.ud-editor .excalidraw--mobile.excalidraw .HintViewer {
+  padding-left: 3rem;
+}

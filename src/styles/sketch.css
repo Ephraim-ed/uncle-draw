@@ -683,6 +683,16 @@
   font-weight: 600;
 }
 
+/* Phones (§11): the save status floats under Excalidraw's toolbar, above the
+   canvas but below its menus and dialogs. */
+.ud-mobile-status {
+  position: absolute;
+  top: calc(env(safe-area-inset-top, 0px) + 68px);
+  left: 12px;
+  z-index: 3;
+  pointer-events: auto;
+}
+
 /* Save-status pill (§9.1): 36 px tall, like Excalidraw's toolbar buttons. */
 .ud-pill-wrap {
   display: inline-flex;
@@ -691,8 +701,10 @@
 }
 .ud-pill.ud-sketch {
   --ud-sketch-fill: var(--ud-surface);
+  box-sizing: border-box;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   height: 36px;
   min-width: 36px;
@@ -714,8 +726,31 @@
 .ud-pill--danger.ud-sketch {
   color: var(--ud-danger);
 }
+/* Saving / saved: a fixed 36 px square, so the top bar never shifts while autosaving. */
+.ud-pill--icon.ud-sketch {
+  width: 36px;
+  padding: 0;
+}
+.ud-pill__icon {
+  display: inline-flex;
+}
+.ud-pill-wrap[data-status="saved"] .ud-pill__icon {
+  animation: ud-pill-pop 220ms ease-out;
+}
 .ud-pill__text {
   animation: ud-fade-in 150ms ease-out;
+}
+@keyframes ud-pill-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ud-pill-wrap[data-status="saved"] .ud-pill__icon,
+  .ud-pill__text {
+    animation: none;
+  }
 }
 .ud-pill__retry {
   padding: 4px 2px;

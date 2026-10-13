@@ -1,11 +1,10 @@
 import { IconAlertTriangle, IconCheck, IconCloudOff } from "@tabler/icons-react";
-import { useEffect, useState } from "react";
 import { RoughDrawing, SketchArt, hashSeed } from "../../components/sketch";
 import type { ErrorReason, SaveStatus } from "./saveQueue";
 
 export interface SaveStatusPillProps {
   status: SaveStatus;
-  /** Changes on every save so "Saved" re-appears before collapsing. */
+  /** Changes on every save, so the check pops again. */
   nonce?: number;
   errorReason: ErrorReason;
   /** Phones show the icon only (§11). */
@@ -57,8 +56,10 @@ function label(status: SaveStatus, errorReason: ErrorReason, backupAvailable: bo
 }
 
 /**
- * Save-status pill (SAVE-2; tech §7.3; VISUAL_DESIGN.md §9.1). Announced
- * politely to screen readers; "Saved" collapses to the check after 2 s.
+ * Save-status pill (SAVE-2; tech §7.3; VISUAL_DESIGN.md §9.1). Autosave runs
+ * every few seconds, so "Saving…" and "Saved" are a fixed-size icon (label in
+ * the tooltip and the live region) and the top bar never shifts. States that
+ * need attention, offline and errors, spell themselves out.
  */
 export function SaveStatusPill({
   status,
@@ -68,19 +69,8 @@ export function SaveStatusPill({
   backupAvailable = true,
   onRetry,
 }: SaveStatusPillProps) {
-  // "Saved" shows its label for 2 s after each save, then collapses to the icon.
-  const key = `${status}:${nonce}`;
-  const [collapsedKey, setCollapsedKey] = useState<string | null>(null);
-  const collapsed = collapsedKey === key;
-
-  useEffect(() => {
-    if (status !== "saved") return;
-    const id = window.setTimeout(() => setCollapsedKey(key), 2000);
-    return () => window.clearTimeout(id);
-  }, [status, key]);
-
   const text = label(status, errorReason, backupAvailable);
-  const showText = !iconOnly && !(status === "saved" && collapsed);
+  const showText = !iconOnly && (status === "offline" || status === "error");
   const danger = status === "error";
 
   const icon =
@@ -94,20 +84,22 @@ export function SaveStatusPill({
       <IconAlertTriangle size={18} stroke={1.75} />
     );
 
-  const body = (
-    <>
-      <SketchArt seed={hashSeed("save-pill")} shape="roundRect" radius={12} fillStyle="solid" />
-      <span className="inline-flex" aria-hidden="true">
-        {icon}
-      </span>
-      <span className={showText ? "ud-pill__text" : "ud-visually-hidden"}>{text}</span>
-    </>
-  );
-
   return (
     <div className="ud-pill-wrap" data-status={status}>
-      <span className={`ud-pill ud-sketch${danger ? " ud-pill--danger" : ""}`} title={text}>
-        {body}
+      <span
+        className={`ud-pill ud-sketch${showText ? "" : " ud-pill--icon"}${danger ? " ud-pill--danger" : ""}`}
+        title={text}
+      >
+        <SketchArt seed={hashSeed("save-pill")} shape="roundRect" radius={12} fillStyle="solid" />
+        {/* Keyed so each finished save replays the check's pop. */}
+        <span
+          key={status === "saved" ? `saved-${nonce}` : status}
+          className="ud-pill__icon"
+          aria-hidden="true"
+        >
+          {icon}
+        </span>
+        <span className={showText ? "ud-pill__text" : "ud-visually-hidden"}>{text}</span>
       </span>
       {status === "error" && errorReason !== "tooLarge" ? (
         <button type="button" className="ud-pill__retry" onClick={onRetry}>

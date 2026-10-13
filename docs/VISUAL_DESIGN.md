@@ -368,13 +368,17 @@ States match `TECHNICAL_REQUIREMENTS.md` §7.3:
 
 | State | Icon (Tabler) | Label | Color |
 |---|---|---|---|
-| `saved` | `IconCheck` | "Saved" → icon only after 2 s | `--ud-ink-muted` |
-| `saving` | Boiling rough scribble (custom) | "Saving…" | `--ud-ink-muted` |
+| `saved` | `IconCheck` (pops in after each save) | "Saved", in the tooltip and live region | `--ud-ink-muted` |
+| `saving` | Boiling rough scribble (custom) | "Saving…", in the tooltip and live region | `--ud-ink-muted` |
 | `offline` | `IconCloudOff` | "Offline · saved on this device" | `--ud-warning` icon, ink text |
 | `error` | `IconAlertTriangle` | "Couldn't save · **Retry**" | `--ud-danger` |
 | `conflict` | `IconAlertCircle` | "Changed elsewhere" → opens the conflict dialog | `--ud-danger` |
 
 The pill is a small rough rounded rectangle on `--ud-surface`, the same height as Excalidraw's toolbar buttons (36 px). The label is announced through `aria-live="polite"`.
+
+- **Saving and saved are icon-only.** The pill is a fixed 36 × 36 px square, because autosave runs every few seconds. A visible label that grows and shrinks would push the board title back and forth on every save.
+- **Offline and errors show their label,** since they need attention.
+- **On phones,** Excalidraw places the top-right slot in its toolbar row, which has no room. The pill floats under the toolbar at the top-left instead. Share and "Back to boards" are in the main menu.
 
 ### 9.2 Dialogs for important states
 - **Conflict:** "This board was changed somewhere else." Buttons: "Load the latest" (primary) and "Keep my version" (secondary). One line explains what each does.

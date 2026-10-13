@@ -23,6 +23,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate, useParams } from "react-router";
 import { useTheme } from "../../app/theme";
 import { Wordmark } from "../../brand/Wordmark";
@@ -70,33 +71,50 @@ interface EditorUi {
   /** Null for editors: only the owner renames (COLLAB-1). */
   rename: ((title: string) => void) | null;
   openShare: () => void;
+  /** The editor container: phones show the save status here, outside the toolbar row. */
+  host: HTMLElement | null;
 }
 
 const EditorUiContext = createContext<EditorUi | null>(null);
 
+function EditorStatus({ iconOnly }: { iconOnly: boolean }) {
+  const ui = useContext(EditorUiContext)!;
+  const status = useSyncExternalStore(ui.session.subscribe, ui.session.getState);
+  return (
+    <SaveStatusPill
+      status={status.status}
+      nonce={status.nonce}
+      errorReason={status.errorReason}
+      iconOnly={iconOnly}
+      backupAvailable={ui.cacheAvailable}
+      onRetry={ui.session.retry}
+    />
+  );
+}
+
 /** renderTopRightUI content (VISUAL_DESIGN.md §6.3): title, status pill, Share, avatar. */
 function EditorTopRight({ isMobile }: { isMobile: boolean }) {
   const ui = useContext(EditorUiContext)!;
-  const status = useSyncExternalStore(ui.session.subscribe, ui.session.getState);
   const wide = useMediaQuery("(min-width: 1024px)");
+  if (isMobile) {
+    // Phones (§11): Excalidraw puts this slot in the toolbar row, which has no
+    // room to spare. The status floats under the toolbar instead; Share and
+    // "Back to boards" are in the main menu.
+    return ui.host
+      ? createPortal(
+          <div className="ud-slot ud-mobile-status">
+            <EditorStatus iconOnly />
+          </div>,
+          ui.host,
+        )
+      : null;
+  }
   return (
     <div className="ud-slot ud-topright">
-      {wide && !isMobile ? <BoardTitle title={ui.title} onRename={ui.rename ?? undefined} /> : null}
-      <SaveStatusPill
-        status={status.status}
-        nonce={status.nonce}
-        errorReason={status.errorReason}
-        iconOnly={isMobile}
-        backupAvailable={ui.cacheAvailable}
-        onRetry={ui.session.retry}
-      />
-      <SketchButton
-        size="sm"
-        icon={<IconShare size={18} stroke={1.75} />}
-        onClick={ui.openShare}
-        aria-label={isMobile ? "Share" : undefined}
-      >
-        {isMobile ? undefined : "Share"}
+      {wide ? <BoardTitle title={ui.title} onRename={ui.rename ?? undefined} /> : null}
+      <EditorStatus iconOnly={false} />
+      <SketchButton size="sm" icon={<IconShare size={18} stroke={1.75} />} onClick={ui.openShare}>
+        Share
       </SketchButton>
       <AvatarMenu size={28} />
     </div>
@@ -121,6 +139,7 @@ function BoardEditor({ data, onGone }: { data: ReadyBoard; onGone: () => void })
   const [shareOpen, setShareOpen] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
   const [api, setApi] = useState<ExcalidrawImperativeAPI | null>(null);
+  const [host, setHost] = useState<HTMLDivElement | null>(null);
   useDocumentTitle(title);
 
   const refreshDashboard = useCallback(
@@ -314,8 +333,9 @@ function BoardEditor({ data, onGone }: { data: ReadyBoard; onGone: () => void })
       cacheAvailable: data.cacheAvailable,
       rename,
       openShare: () => setShareOpen(true),
+      host,
     }),
-    [session, title, data.cacheAvailable, rename],
+    [session, title, data.cacheAvailable, rename, host],
   );
 
   const children = useMemo(
@@ -374,7 +394,7 @@ function BoardEditor({ data, onGone }: { data: ReadyBoard; onGone: () => void })
 
   return (
     <EditorUiContext.Provider value={ui}>
-      <div className="ud-editor">
+      <div className="ud-editor" ref={setHost}>
         <Excalidraw
           excalidrawAPI={onExcalidrawAPI}
           initialData={initialData}
