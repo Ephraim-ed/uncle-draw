@@ -1,4 +1,5 @@
 import { safeNext } from "../../lib/safeNext";
+import { siteOrigin } from "../../lib/site";
 
 /**
  * Where to land after sign-in (AUTH-4). Kept in localStorage instead of the
@@ -49,5 +50,5 @@ export function lastEmail(): string {
 }
 
 export function callbackUrl(): string {
-  return `${window.location.origin}/auth/callback`;
+  return `${siteOrigin()}/auth/callback`;
 }

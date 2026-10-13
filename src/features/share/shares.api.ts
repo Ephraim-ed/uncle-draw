@@ -1,3 +1,4 @@
+import { siteOrigin } from "../../lib/site";
 import { supabase } from "../../lib/supabase";
 
 export interface ShareLink {
@@ -17,8 +18,9 @@ export function generateShareToken(): string {
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
+/** Always on the public domain, so viewers never hit a protected alias. */
 export function shareUrl(token: string): string {
-  return `${window.location.origin}/s/${token}`;
+  return `${siteOrigin()}/s/${token}`;
 }
 
 /** The board's one active link, if any (SHARE-1). */

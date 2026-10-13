@@ -92,6 +92,7 @@ CI (`.github/workflows/ci.yml`) runs everything on each pull request: lint, type
 ## Deploying
 
 - **Frontend:** static hosting (Vercel, Netlify or Cloudflare Pages). Every route rewrites to `index.html`: `vercel.json` covers Vercel and `public/_redirects` covers Netlify and Cloudflare. Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in the host's environment.
+- **One public address:** production builds on Vercel use the project's production domain (for example `https://uncle-draw.vercel.app`) for magic links and share links. Visitors who open another alias of the production deployment are moved there. Set `VITE_SITE_URL` to override. Previews and local dev keep their own address. In Supabase, set the production project's Site URL to that domain and add `https://<domain>/**` to its redirect URLs.
 - **Database and functions:** `.github/workflows/deploy-db.yml` runs `supabase db push` and deploys `get-shared-board` on merge to `main`. It needs these repository secrets:
   - `SUPABASE_ACCESS_TOKEN`
   - `SUPABASE_DB_PASSWORD`

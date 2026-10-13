@@ -10,16 +10,12 @@ import { supabase } from "../../lib/supabase";
 import { useDocumentTitle } from "../../lib/useDocumentTitle";
 import { useAuth } from "./AuthProvider";
 import { callbackUrl, lastEmail, rememberEmail, rememberNext } from "./authNext";
+import { WAIT_MESSAGE, classifyRateLimit } from "./rateLimit";
 
 const COOLDOWN_MS = 60_000;
-const WAIT_MESSAGE = "Please wait a minute before requesting another link.";
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 type Mode = "form" | "sent";
-
-function isRateLimited(error: { status?: number; code?: string } | null): boolean {
-  return !!error && (error.status === 429 || error.code === "over_email_send_rate_limit");
-}
 
 /** /login: magic link + GitHub (AUTH-1, AUTH-2; VISUAL_DESIGN.md §6.1). */
 export function LoginPage() {
@@ -64,9 +60,10 @@ export function LoginPage() {
       options: { emailRedirectTo: callbackUrl(), shouldCreateUser: true },
     });
     setSending(false);
-    if (isRateLimited(otpError)) {
-      cooldownUntil.current = Date.now() + COOLDOWN_MS;
-      setError(WAIT_MESSAGE);
+    const limit = classifyRateLimit(otpError);
+    if (limit) {
+      if (limit.kind === "cooldown") cooldownUntil.current = Date.now() + COOLDOWN_MS;
+      setError(limit.message);
       return;
     }
     if (otpError) {

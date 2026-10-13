@@ -1,10 +1,22 @@
 /// <reference types="vitest/config" />
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { viteStaticCopy } from "vite-plugin-static-copy";
 
-export default defineConfig({
+/**
+ * The app's public address. VITE_SITE_URL wins; otherwise Vercel production
+ * builds use the project's production domain (a Vercel system variable).
+ * Previews, local dev and tests leave it unset and use their own origin.
+ */
+function siteUrl(mode: string): string {
+  const explicit = loadEnv(mode, process.cwd(), "VITE_").VITE_SITE_URL;
+  if (explicit) return explicit;
+  const vercelDomain = process.env.VERCEL_PROJECT_PRODUCTION_URL;
+  return process.env.VERCEL_ENV === "production" && vercelDomain ? `https://${vercelDomain}` : "";
+}
+
+export default defineConfig(({ mode }) => ({
   plugins: [
     react(),
     tailwindcss(),
@@ -26,6 +38,7 @@ export default defineConfig({
   define: {
     // Excalidraw checks this at runtime; Vite doesn't define `process`.
     "process.env.IS_PREACT": JSON.stringify("false"),
+    "import.meta.env.VITE_SITE_URL": JSON.stringify(siteUrl(mode)),
   },
   build: {
     manifest: true,
@@ -46,4 +59,4 @@ export default defineConfig({
       },
     },
   },
-});
+}));
