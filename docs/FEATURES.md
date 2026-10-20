@@ -51,6 +51,7 @@ This doc lists what Uncle Draw does, for whom, and when. Each feature has an ID,
 | EDIT-4 | Uncle Draw menu, welcome screen and branding | v1 | P0 |
 | EDIT-5 | Remember my view and last-used style | v1 | P1 |
 | EDIT-6 | Mermaid → diagram | v1.1 | P2 |
+| EDIT-7 | Tables with checkboxes | v1.1 | P1 |
 | SAVE-1 | Autosave to the cloud | v1 | P0 |
 | SAVE-2 | Save-status indicator | v1 | P0 |
 | SAVE-3 | Offline backup and recovery | v1 | P0 |
@@ -197,6 +198,17 @@ Acceptance:
 ### EDIT-6 · Mermaid → diagram · v1.1 · P2
 - [ ] Main menu → "Mermaid to diagram" opens Excalidraw's Mermaid dialog and inserts the result as sketchy elements.
 - [ ] No AI text-to-diagram (see Non-goals).
+
+### EDIT-7 · Tables with checkboxes · v1.1 · P1
+*As a user, I want to drop a table on my board, type in its cells and tick rows off.*
+- The footer's **Table** button (desktop) or Main menu → "Insert table…" opens a dialog: rows (1–30), columns (1–12), a shaded header row, and a checkbox at the start of each row. The choices are remembered on this device.
+- A table is ordinary Excalidraw shapes in one group: cell rectangles with bound text, small checkbox squares, and pen-style ticks. It saves, syncs live, undoes, exports and shows in share views like any other drawing, and it keeps the board's sketchy style.
+
+Acceptance:
+- [ ] Clicking a checkbox ticks or unticks it without selecting or moving the table. Shift/Ctrl/Alt-click still selects the box itself. Each tick is one undo step.
+- [ ] Double-clicking a cell starts typing in it. Double-clicking a checkbox never drops a stray text box.
+- [ ] When text wraps and makes a cell taller, the whole row grows and the rows below move down. Rows don't shrink on their own.
+- [ ] Ticks survive a reload, reach collaborators live, and show (read-only) in share views.
 
 ---
 

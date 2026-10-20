@@ -272,6 +272,29 @@
   padding-bottom: 12px;
 }
 
+/* ---------- Checkbox (label + native box) ------------------------------- */
+
+.ud-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--ud-ink);
+  font-size: 16px;
+  line-height: 24px;
+  cursor: pointer;
+}
+.ud-check input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--ud-primary);
+  cursor: pointer;
+}
+.ud-check input:focus-visible {
+  outline: 2px solid var(--ud-primary);
+  outline-offset: 3px;
+}
+
 /* ---------- Box / card -------------------------------------------------- */
 
 .ud-box {
@@ -651,6 +674,13 @@
   pointer-events: auto;
 }
 
+/* Footer slot, next to undo/redo: the "Table" button (EDIT-7). */
+.ud-footer {
+  display: flex;
+  align-items: center;
+  pointer-events: auto;
+}
+
 .ud-title {
   max-width: 240px;
   padding: 6px 8px;
@@ -726,30 +756,74 @@
 .ud-pill--danger.ud-sketch {
   color: var(--ud-danger);
 }
-/* Saving / saved: a fixed 36 px square, so the top bar never shifts while autosaving. */
+/* Phones: icon only, a 36 px square that reads over the canvas. */
 .ud-pill--icon.ud-sketch {
   width: 36px;
   padding: 0;
 }
-.ud-pill__icon {
+
+/* Saving / saved on wider screens: quiet text, no box (a status, not a button). */
+.ud-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 4px;
+  color: var(--ud-ink-muted);
+  font-family: var(--ud-font-ui);
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: default;
+  user-select: none;
+}
+.ud-status__icon {
   display: inline-flex;
 }
-.ud-pill-wrap[data-status="saved"] .ud-pill__icon {
-  animation: ud-pill-pop 220ms ease-out;
+/* Both labels stack in one cell, so switching never changes the width. */
+.ud-status__labels {
+  display: inline-grid;
+}
+.ud-status__labels > * {
+  grid-area: 1 / 1;
+  transition: opacity 150ms ease-out;
+}
+.ud-status__ghost {
+  opacity: 0;
+}
+.ud-pill-wrap[data-status="saved"] .ud-status__icon {
+  color: var(--ud-success);
+  animation: ud-status-pop 260ms ease-out;
+}
+.ud-pill-wrap[data-status="saving"] .ud-status__icon {
+  animation: ud-status-lift 1.1s ease-in-out infinite;
 }
 .ud-pill__text {
   animation: ud-fade-in 150ms ease-out;
 }
-@keyframes ud-pill-pop {
-  from {
+@keyframes ud-status-pop {
+  0% {
     opacity: 0;
     transform: scale(0.6);
   }
+  70% {
+    transform: scale(1.12);
+  }
+}
+@keyframes ud-status-lift {
+  50% {
+    opacity: 0.55;
+    transform: translateY(-2px);
+  }
 }
 @media (prefers-reduced-motion: reduce) {
-  .ud-pill-wrap[data-status="saved"] .ud-pill__icon,
+  .ud-pill-wrap .ud-status__icon,
   .ud-pill__text {
     animation: none;
+  }
+  .ud-status__labels > * {
+    transition: none;
   }
 }
 .ud-pill__retry {

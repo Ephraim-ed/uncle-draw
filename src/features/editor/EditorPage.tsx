@@ -1,7 +1,14 @@
 import "@excalidraw/excalidraw/index.css";
 import "../../styles/excalidraw-overrides.css";
 
-import { Excalidraw, MIME_TYPES, MainMenu, WelcomeScreen, serializeAsJSON } from "@excalidraw/excalidraw";
+import {
+  Excalidraw,
+  Footer,
+  MIME_TYPES,
+  MainMenu,
+  WelcomeScreen,
+  serializeAsJSON,
+} from "@excalidraw/excalidraw";
 import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
 import type {
   AppState,
@@ -10,7 +17,7 @@ import type {
   ExcalidrawInitialDataState,
   UIOptions,
 } from "@excalidraw/excalidraw/types";
-import { IconArrowLeft, IconDownload, IconPencil, IconShare } from "@tabler/icons-react";
+import { IconArrowLeft, IconDownload, IconPencil, IconShare, IconTable } from "@tabler/icons-react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   createContext,
@@ -48,6 +55,9 @@ import { RecoveryDialog, RenameDialog } from "./EditorDialogs";
 import { EditorSession, prefsKey } from "./EditorSession";
 import { SaveStatusPill } from "./SaveStatusPill";
 import { registerFlush } from "./saveRegistry";
+import { InsertTableDialog } from "./table/InsertTableDialog";
+import type { TableOptions } from "./table/table";
+import { insertTable, useTables } from "./table/useTables";
 import { useBoardLoad, type ReadyBoard } from "./useBoardLoad";
 
 const UI_OPTIONS: Partial<UIOptions> = {
@@ -84,6 +94,7 @@ function EditorStatus({ iconOnly }: { iconOnly: boolean }) {
     <SaveStatusPill
       status={status.status}
       nonce={status.nonce}
+      savedAt={status.savedAt}
       errorReason={status.errorReason}
       iconOnly={iconOnly}
       backupAvailable={ui.cacheAvailable}
@@ -138,6 +149,7 @@ function BoardEditor({ data, onGone }: { data: ReadyBoard; onGone: () => void })
   const [title, setTitle] = useState(data.board.title);
   const [shareOpen, setShareOpen] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
+  const [tableOpen, setTableOpen] = useState(false);
   const [api, setApi] = useState<ExcalidrawImperativeAPI | null>(null);
   const [host, setHost] = useState<HTMLDivElement | null>(null);
   useDocumentTitle(title);
@@ -170,6 +182,7 @@ function BoardEditor({ data, onGone }: { data: ReadyBoard; onGone: () => void })
         userId: user.id,
         boardId,
         initialVersion: data.board.version,
+        lastSavedAt: Date.parse(data.board.updated_at) || null,
         baselineFingerprint: data.baselineFingerprint,
         serverElements: data.serverElements,
         serverAppState: data.board.app_state,
@@ -262,6 +275,9 @@ function BoardEditor({ data, onGone }: { data: ReadyBoard; onGone: () => void })
     return session.startCollab(api, { identity: identityRef.current, onPeersChange: setPeers });
   }, [api, session]);
 
+  // Tables: click-to-tick checkboxes, one-step cell editing, rows that fit their text (EDIT-7).
+  useTables(api, host);
+
   // Images: signed URLs → data URLs → addFiles. Placeholders show until then.
   useEffect(() => {
     if (!api || data.fileRows.length === 0) return;
@@ -318,6 +334,20 @@ function BoardEditor({ data, onGone }: { data: ReadyBoard; onGone: () => void })
 
   const backToBoards = useCallback(() => navigate("/boards"), [navigate]);
 
+  const openTableDialog = useCallback(() => {
+    if (api?.getAppState().viewModeEnabled) {
+      toast({ message: "Turn off view mode to add a table." });
+      return;
+    }
+    setTableOpen(true);
+  }, [api, toast]);
+  const addTable = useCallback(
+    (options: TableOptions) => {
+      if (api) insertTable(api, options);
+    },
+    [api],
+  );
+
   const saveToFile = useCallback(() => {
     if (!api) return;
     const json = serializeAsJSON(api.getSceneElements(), api.getAppState(), api.getFiles(), "local");
@@ -354,6 +384,9 @@ function BoardEditor({ data, onGone }: { data: ReadyBoard; onGone: () => void })
             Share…
           </MainMenu.Item>
           <MainMenu.Separator />
+          <MainMenu.Item icon={<IconTable size={16} stroke={1.75} />} onSelect={openTableDialog}>
+            Insert table…
+          </MainMenu.Item>
           <MainMenu.DefaultItems.SaveAsImage />
           <MainMenu.Item icon={<IconDownload size={16} stroke={1.75} />} onSelect={saveToFile}>
             Save to file
@@ -365,6 +398,14 @@ function BoardEditor({ data, onGone }: { data: ReadyBoard; onGone: () => void })
           <MainMenu.DefaultItems.ChangeCanvasBackground />
           <MainMenu.DefaultItems.ClearCanvas />
         </MainMenu>
+        {/* Next to undo/redo on desktop; phones use the main menu item. */}
+        <Footer>
+          <div className="ud-slot ud-footer">
+            <SketchButton size="sm" icon={<IconTable size={18} stroke={1.75} />} onClick={openTableDialog}>
+              Table
+            </SketchButton>
+          </div>
+        </Footer>
         <WelcomeScreen>
           <WelcomeScreen.Hints.MenuHint />
           <WelcomeScreen.Hints.ToolbarHint />
@@ -389,7 +430,7 @@ function BoardEditor({ data, onGone }: { data: ReadyBoard; onGone: () => void })
         </WelcomeScreen>
       </>
     ),
-    [backToBoards, saveToFile, setting, setTheme, isOwner],
+    [backToBoards, saveToFile, setting, setTheme, isOwner, openTableDialog],
   );
 
   return (
@@ -419,6 +460,7 @@ function BoardEditor({ data, onGone }: { data: ReadyBoard; onGone: () => void })
           onRename={rename}
         />
       ) : null}
+      {tableOpen ? <InsertTableDialog onClose={() => setTableOpen(false)} onInsert={addTable} /> : null}
       {shareOpen ? (
         <ShareDialog
           open

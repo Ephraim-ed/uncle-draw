@@ -21,24 +21,34 @@ describe("SaveStatusPill (SAVE-2; VISUAL_DESIGN.md §9.1)", () => {
     expect(live()).toHaveTextContent(text);
   });
 
-  it("saving and saved are a fixed-size icon, labelled by tooltip (no layout shift)", () => {
+  it("saving and saved share one fixed slot, with no box (no layout shift)", () => {
     const { rerender, container } = render(
       <SaveStatusPill status="saving" errorReason={null} onRetry={() => {}} />,
     );
-    const pill = () => container.querySelector(".ud-pill")!;
-    expect(pill()).toHaveClass("ud-pill--icon");
-    expect(pill()).toHaveAttribute("title", "Saving…");
-    expect(container.querySelector(".ud-pill__text")).toBeNull();
+    const status = () => container.querySelector(".ud-status")!;
+    const visibleLabel = () => container.querySelector(".ud-status__labels > :not(.ud-status__ghost)");
+    expect(container.querySelector(".ud-pill")).toBeNull();
+    expect(visibleLabel()).toHaveTextContent("Saving…");
+    expect(container.querySelectorAll(".ud-status__labels > *")).toHaveLength(2);
 
     rerender(<SaveStatusPill status="saved" nonce={1} errorReason={null} onRetry={() => {}} />);
-    expect(pill()).toHaveClass("ud-pill--icon");
-    expect(pill()).toHaveAttribute("title", "Saved");
+    expect(visibleLabel()).toHaveTextContent("Saved");
+    expect(status()).toHaveAttribute("title", "All changes saved");
     expect(live()).toHaveTextContent("Saved");
   });
 
-  it("offline and errors spell themselves out", () => {
+  it("the tooltip says when it last saved", () => {
+    const at = new Date();
+    at.setHours(9, 5, 0, 0);
+    const { container } = render(
+      <SaveStatusPill status="saved" savedAt={at.getTime()} errorReason={null} onRetry={() => {}} />,
+    );
+    expect(container.querySelector(".ud-status")).toHaveAttribute("title", "Saved at 9:05 AM");
+  });
+
+  it("offline and errors spell themselves out in a pill", () => {
     const { container } = render(<SaveStatusPill status="offline" errorReason={null} onRetry={() => {}} />);
-    expect(container.querySelector(".ud-pill")).not.toHaveClass("ud-pill--icon");
+    expect(container.querySelector(".ud-status")).toBeNull();
     expect(container.querySelector(".ud-pill__text")).toHaveTextContent("Offline · saved on this device");
   });
 
@@ -60,10 +70,13 @@ describe("SaveStatusPill (SAVE-2; VISUAL_DESIGN.md §9.1)", () => {
     expect(live()).toHaveTextContent("Offline · will sync when you're back");
   });
 
-  it("phones show the icon only", () => {
-    const { container } = render(
+  it("phones show the icon only, in a pill", () => {
+    const { container, rerender } = render(
       <SaveStatusPill status="offline" errorReason={null} iconOnly onRetry={() => {}} />,
     );
     expect(container.querySelector(".ud-pill__text")).toBeNull();
+    rerender(<SaveStatusPill status="saved" errorReason={null} iconOnly onRetry={() => {}} />);
+    expect(container.querySelector(".ud-pill--icon")).not.toBeNull();
+    expect(container.querySelector(".ud-status")).toBeNull();
   });
 });

@@ -264,7 +264,7 @@ Search, sort and the Trash link arrive in v1.1 (DASH-6, DASH-8). In v1 the heade
 │                       full-bleed Excalidraw canvas                    │
 │                                                                      │
 │                                                                      │
-│ (−  100%  +) (↶ ↷)                                                (?) │
+│ (−  100%  +) (↶ ↷) [▦ Table]                                       (?) │
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -276,8 +276,10 @@ Search, sort and the Trash link arrive in v1.1 (DASH-6, DASH-8). In v1 the heade
   4. **Avatar** menu.
 - **Main menu (`<MainMenu>`)**:
   - Uncle Draw items first: "← Back to boards", "Rename…", "Share…", separator.
-  - Then the Excalidraw defaults we keep: Export image, Save to file (`.excalidraw`), Find on canvas, Help, Theme toggle, Canvas background, Reset canvas.
+  - Then "Insert table…" (EDIT-7) and the Excalidraw defaults we keep: Export image, Save to file (`.excalidraw`), Find on canvas, Help, Theme toggle, Canvas background, Reset canvas.
   - Remove "Open" (`loadScene`). Importing happens from the dashboard.
+- **Footer (`<Footer>`)**: a small secondary **Table** button next to undo/redo opens the "Insert a table" dialog (EDIT-7). Phones have no footer, so they use the main menu item.
+- **Tables** keep the canvas style: 1 px cell borders in the current stroke color and sloppiness, body cells filled with the canvas color, a light gray (`#e9ecef`) header row, 22 px checkboxes with rounded corners, and a tick that overshoots the box like a quick pen mark. The pointer cursor shows over a checkbox.
 - **Welcome screen (`<WelcomeScreen>`)** on an empty board:
   - Center: the Uncle Draw wordmark (in place of Excalidraw's logo) and "Start sketching. Uncle Draw saves as you go."
   - Center menu: "Back to boards" and "Help".
@@ -363,22 +365,22 @@ New boards start with these `appState` values (passed through `initialData`). Ea
 
 ## 9. State visuals
 
-### 9.1 Save-status pill
+### 9.1 Save status
 States match `TECHNICAL_REQUIREMENTS.md` §7.3:
 
-| State | Icon (Tabler) | Label | Color |
+| State | Icon (Tabler) | Label | Look |
 |---|---|---|---|
-| `saved` | `IconCheck` (pops in after each save) | "Saved", in the tooltip and live region | `--ud-ink-muted` |
-| `saving` | Boiling rough scribble (custom) | "Saving…", in the tooltip and live region | `--ud-ink-muted` |
-| `offline` | `IconCloudOff` | "Offline · saved on this device" | `--ud-warning` icon, ink text |
-| `error` | `IconAlertTriangle` | "Couldn't save · **Retry**" | `--ud-danger` |
-| `conflict` | `IconAlertCircle` | "Changed elsewhere" → opens the conflict dialog | `--ud-danger` |
+| `saved` | `IconCloudCheck` in `--ud-success`, pops in after each save | "Saved"; tooltip "Saved at 3:42 PM" | Quiet: no box, `--ud-ink-muted` 13/600 |
+| `saving` | `IconCloudUpload`, gently lifting | "Saving…" | Quiet: no box, `--ud-ink-muted` 13/600 |
+| `offline` | `IconCloudOff` in `--ud-warning` | "Offline · saved on this device" | Rough pill on `--ud-surface`, ink text |
+| `error` | `IconAlertTriangle` | "Couldn't save · **Retry**" | Rough pill, `--ud-danger` |
 
-The pill is a small rough rounded rectangle on `--ud-surface`, the same height as Excalidraw's toolbar buttons (36 px). The label is announced through `aria-live="polite"`.
-
-- **Saving and saved are icon-only.** The pill is a fixed 36 × 36 px square, because autosave runs every few seconds. A visible label that grows and shrinks would push the board title back and forth on every save.
-- **Offline and errors show their label,** since they need attention.
-- **On phones,** Excalidraw places the top-right slot in its toolbar row, which has no room. The pill floats under the toolbar at the top-left instead. Share and "Back to boards" are in the main menu.
+- **Saving and saved are a status, not a button.** They show an icon and a muted label with no outline.
+- **Both labels share one grid cell,** so their slot is always as wide as the longer one. Autosave runs every few seconds, and a slot that resized would push the board title back and forth on every save.
+- **Offline and errors need attention,** so they get the rough rounded pill (36 px tall, like Excalidraw's toolbar buttons) with the full message.
+- **On phones,** Excalidraw places the top-right slot in its toolbar row, which has no room. The status is then an icon-only 36 px pill under the toolbar at the top-left. Share and "Back to boards" are in the main menu.
+- **Announcements:** every state is announced through `aria-live="polite"`.
+- **Reduced motion:** the pop and lift animations stop.
 
 ### 9.2 Dialogs for important states
 - **Conflict:** "This board was changed somewhere else." Buttons: "Load the latest" (primary) and "Keep my version" (secondary). One line explains what each does.

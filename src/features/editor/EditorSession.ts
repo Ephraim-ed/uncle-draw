@@ -40,8 +40,11 @@ import {
 } from "./serialize";
 import { ThumbnailScheduler, renderThumbnail, type ThumbnailSnapshot } from "./thumbnail";
 
-/** Save state plus a nonce that changes on every save, so "Saved" can re-appear. */
-export type EditorStatus = SaveQueueState & { nonce: number };
+/**
+ * Save state, a nonce that changes on every save (so "Saved" can re-animate),
+ * and when the board was last saved (by me or a collaborator).
+ */
+export type EditorStatus = SaveQueueState & { nonce: number; savedAt: number | null };
 
 export interface Snapshot {
   elements: readonly ExcalidrawElement[];
@@ -52,6 +55,8 @@ export interface EditorSessionOptions {
   userId: string;
   boardId: string;
   initialVersion: number;
+  /** When the server copy was last written (the board's updated_at), for the status tooltip. */
+  lastSavedAt?: number | null;
   /** Fingerprint of the scene the server has; null forces a first save (restored local changes). */
   baselineFingerprint: string | null;
   /** The scene as the server has it (collaborators already have these versions). */
@@ -132,6 +137,8 @@ export class EditorSession {
 
   private state: EditorStatus;
   private nonce = 0;
+  /** Last real save to the server, mine or an adopted collaborator's. */
+  private savedAt: number | null;
   private listeners = new Set<() => void>();
 
   constructor(private readonly o: EditorSessionOptions) {
@@ -152,6 +159,7 @@ export class EditorSession {
       rebase: (snap) => this.rebase(snap),
       onChange: (state) => this.emit(state),
       onSaved: (snap, version, fingerprint) => {
+        this.savedAt = Date.now();
         // Re-record the backup with the new serverVersion. Use the newest scene,
         // not the saved one: changes made during the save must stay backed up.
         this.writeBackup(this.latest ?? snap);
@@ -161,7 +169,8 @@ export class EditorSession {
       },
     });
     this.queue.setBaseline(o.baselineFingerprint);
-    this.state = { ...this.queue.getState(), nonce: 0 };
+    this.savedAt = o.lastSavedAt ?? null;
+    this.state = { ...this.queue.getState(), nonce: 0, savedAt: this.savedAt };
 
     this.files = new FileSync({
       knownIds: o.knownFileIds,
@@ -259,7 +268,7 @@ export class EditorSession {
   getState = (): EditorStatus => this.state;
 
   private emit(state: SaveQueueState) {
-    this.state = { ...state, nonce: ++this.nonce };
+    this.state = { ...state, nonce: ++this.nonce, savedAt: this.savedAt };
     this.listeners.forEach((l) => l());
   }
 
@@ -421,6 +430,7 @@ export class EditorSession {
     const api = this.api;
     if (!api || this.suspended || this.disposed) return;
     if (sceneFingerprint(api.getSceneElementsIncludingDeleted(), api.getAppState()) === fingerprint) {
+      this.savedAt = Date.now();
       this.queue.adoptRemoteSave(version, fingerprint);
       this.o.onServerChange();
     }
