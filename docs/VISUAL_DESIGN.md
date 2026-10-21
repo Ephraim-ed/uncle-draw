@@ -103,7 +103,7 @@ Excalidraw defines its UI colors as CSS variables on `.excalidraw` (light) and `
 ```
 
 Rules:
-- **Don't restyle Excalidraw's internal class names.** They change between releases. Only override variables and use the props and slots the package provides.
+- **Don't restyle Excalidraw's internal class names.** They change between releases. Only override variables and use the props and slots the package provides. The one exception is the toolbar slot for our Table and Flowchart templates tools (EDIT-7, EDIT-8). It's placed after the eraser (found by test id) and reuses Excalidraw's tool-button markup so the buttons match. An e2e test guards it, and the footer takes over if it breaks.
 - Pass the app theme to Excalidraw through the `theme` prop. Excalidraw's dark mode inverts the canvas colors with a CSS filter, so a user's `#1E1E1E` strokes show as light lines.
 - **Thumbnails are always exported in light mode.** In the dark dashboard they appear as light "paper sheets" sitting on the dark desk (see §6.2).
 
@@ -257,14 +257,14 @@ Search, sort and the Trash link arrive in v1.1 (DASH-6, DASH-8). In v1 the heade
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│ (☰)        [ 🔒 ✋ ▭ ◇ ○ → ─ ✎ A 🖼 ⌫ … ]          Sprint map  ✓ Saved [Share] (A) │
+│ (☰)      [ 🔒 ✋ ▭ ◇ ○ → ─ ✎ A 🖼 ⌫ ▦ ⑂ … ]        Sprint map  ✓ Saved [Share] (A) │
 │  ↑ Excalidraw main menu  ↑ Excalidraw toolbar        ↑ renderTopRightUI           │
 │                                                                      │
 │                                                                      │
 │                       full-bleed Excalidraw canvas                    │
 │                                                                      │
 │                                                                      │
-│ (−  100%  +) (↶ ↷) [▦ Table]                                       (?) │
+│ (−  100%  +) (↶ ↷)                                                (?) │
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -276,10 +276,19 @@ Search, sort and the Trash link arrive in v1.1 (DASH-6, DASH-8). In v1 the heade
   4. **Avatar** menu.
 - **Main menu (`<MainMenu>`)**:
   - Uncle Draw items first: "← Back to boards", "Rename…", "Share…", separator.
-  - Then "Insert table…" (EDIT-7) and the Excalidraw defaults we keep: Export image, Save to file (`.excalidraw`), Find on canvas, Help, Theme toggle, Canvas background, Reset canvas.
+  - Then "Insert table…" (EDIT-7), "Flowchart templates…" (EDIT-8) and the Excalidraw defaults we keep: Export image, Save to file (`.excalidraw`), Find on canvas, Help, Theme toggle, Canvas background, Reset canvas.
   - Remove "Open" (`loadScene`). Importing happens from the dashboard.
-- **Footer (`<Footer>`)**: a small secondary **Table** button next to undo/redo opens the "Insert a table" dialog (EDIT-7). Phones have no footer, so they use the main menu item.
-- **Tables** keep the canvas style: 1 px cell borders in the current stroke color and sloppiness, body cells filled with the canvas color, a light gray (`#e9ecef`) header row, 22 px checkboxes with rounded corners, and a tick that overshoots the box like a quick pen mark. The pointer cursor shows over a checkbox.
+- **Toolbar tools** (after Excalidraw's eraser, in its own tool-button markup):
+  - **Table** (▦, shortcut **B**) is a tool: it highlights like the others, and a drag on the canvas shows a dashed primary-blue grid preview with a "3 rows × 2 columns" chip.
+  - **Flowchart templates** (⑂) opens the picker. It's hidden on phones, where the main menu has it.
+- **Footer (`<Footer>`)**: only if the toolbar slot can't be found, secondary small **Table** and **Templates** buttons appear next to undo/redo.
+- **Table bar**: a sketch-framed bar (surface fill, paper-cut shadow) floats 12 px above a selected table, or below it when there's no room, clear of the toolbar and footer.
+  - Ghost icon buttons (34 px, Tabler 18 px) in groups: rows, columns, header/checkbox toggles (pressed = primary), alignment, then style and delete.
+  - The style panel opens under it, with color chips (Excalidraw's quick picks, a dashed "Canvas color" chip, a rainbow custom picker), border widths, and px fields for the active column and row.
+  - The active cell gets a dashed primary outline. Clicking the bar never takes keyboard focus from the canvas.
+- **Grid-line drags** show a 2 px primary guide with a "240 px" chip. The cursor is `col-resize` or `row-resize` over a line and `pointer` over a checkbox.
+- **Tables** keep the canvas style. Defaults: 1 px borders in black, body cells filled with the canvas color, a light gray (`#e9ecef`) header row, centered text, 22 px checkboxes with rounded corners, and a tick that overshoots the box like a quick pen mark.
+- **Flowchart templates dialog** (760 px): a grid of sketch-framed cards. Each has a live preview drawn by Excalidraw on the light thumbnail well (light in both themes, like board thumbnails), a name and a one-line description.
 - **Welcome screen (`<WelcomeScreen>`)** on an empty board:
   - Center: the Uncle Draw wordmark (in place of Excalidraw's logo) and "Start sketching. Uncle Draw saves as you go."
   - Center menu: "Back to boards" and "Help".

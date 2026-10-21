@@ -17,7 +17,14 @@ import type {
   ExcalidrawInitialDataState,
   UIOptions,
 } from "@excalidraw/excalidraw/types";
-import { IconArrowLeft, IconDownload, IconPencil, IconShare, IconTable } from "@tabler/icons-react";
+import {
+  IconArrowLeft,
+  IconDownload,
+  IconPencil,
+  IconShare,
+  IconSitemap,
+  IconTable,
+} from "@tabler/icons-react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   createContext,
@@ -55,9 +62,15 @@ import { RecoveryDialog, RenameDialog } from "./EditorDialogs";
 import { EditorSession, prefsKey } from "./EditorSession";
 import { SaveStatusPill } from "./SaveStatusPill";
 import { registerFlush } from "./saveRegistry";
+import { TableController } from "./table/controller";
 import { InsertTableDialog } from "./table/InsertTableDialog";
-import type { TableOptions } from "./table/table";
-import { insertTable, useTables } from "./table/useTables";
+import { paperColor, type TableSetup } from "./table/options";
+import { TableBar } from "./table/TableBar";
+import { TableToolbarButtons } from "./table/TableToolbar";
+import { useToolbarSlot } from "./table/useToolbarSlot";
+import type { FlowchartTemplate } from "./templates/flowcharts";
+import { insertTemplate } from "./templates/insertTemplate";
+import { TemplatesDialog } from "./templates/TemplatesDialog";
 import { useBoardLoad, type ReadyBoard } from "./useBoardLoad";
 
 const UI_OPTIONS: Partial<UIOptions> = {
@@ -150,6 +163,7 @@ function BoardEditor({ data, onGone }: { data: ReadyBoard; onGone: () => void })
   const [shareOpen, setShareOpen] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
   const [tableOpen, setTableOpen] = useState(false);
+  const [templatesOpen, setTemplatesOpen] = useState(false);
   const [api, setApi] = useState<ExcalidrawImperativeAPI | null>(null);
   const [host, setHost] = useState<HTMLDivElement | null>(null);
   useDocumentTitle(title);
@@ -275,8 +289,16 @@ function BoardEditor({ data, onGone }: { data: ReadyBoard; onGone: () => void })
     return session.startCollab(api, { identity: identityRef.current, onPeersChange: setPeers });
   }, [api, session]);
 
-  // Tables: click-to-tick checkboxes, one-step cell editing, rows that fit their text (EDIT-7).
-  useTables(api, host);
+  // Tables (EDIT-7): ticking, resizing, the table tool, paste into cells and the table bar.
+  const [tables] = useState(() => new TableController());
+  useEffect(() => {
+    if (!api || !host) return;
+    return tables.attach(api, host);
+  }, [api, host, tables]);
+  const { editable } = useSyncExternalStore(tables.subscribe, tables.getState);
+  // Table and flowchart tools sit in Excalidraw's toolbar; the footer has them if it can't be found.
+  const toolbar = useToolbarSlot(host);
+  const footerTools = toolbar.missing && editable;
 
   // Images: signed URLs → data URLs → addFiles. Placeholders show until then.
   useEffect(() => {
@@ -334,16 +356,21 @@ function BoardEditor({ data, onGone }: { data: ReadyBoard; onGone: () => void })
 
   const backToBoards = useCallback(() => navigate("/boards"), [navigate]);
 
-  const openTableDialog = useCallback(() => {
-    if (api?.getAppState().viewModeEnabled) {
-      toast({ message: "Turn off view mode to add a table." });
-      return;
-    }
-    setTableOpen(true);
+  const inViewMode = useCallback(() => {
+    if (!api?.getAppState().viewModeEnabled) return false;
+    toast({ message: "Turn off view mode to add to the board." });
+    return true;
   }, [api, toast]);
-  const addTable = useCallback(
-    (options: TableOptions) => {
-      if (api) insertTable(api, options);
+  const openTableDialog = useCallback(() => {
+    if (!inViewMode()) setTableOpen(true);
+  }, [inViewMode]);
+  const openTemplates = useCallback(() => {
+    if (!inViewMode()) setTemplatesOpen(true);
+  }, [inViewMode]);
+  const addTable = useCallback((setup: TableSetup) => tables.insert(setup), [tables]);
+  const addTemplate = useCallback(
+    (template: FlowchartTemplate) => {
+      if (api) insertTemplate(api, template);
     },
     [api],
   );
@@ -387,6 +414,9 @@ function BoardEditor({ data, onGone }: { data: ReadyBoard; onGone: () => void })
           <MainMenu.Item icon={<IconTable size={16} stroke={1.75} />} onSelect={openTableDialog}>
             Insert table…
           </MainMenu.Item>
+          <MainMenu.Item icon={<IconSitemap size={16} stroke={1.75} />} onSelect={openTemplates}>
+            Flowchart templates…
+          </MainMenu.Item>
           <MainMenu.DefaultItems.SaveAsImage />
           <MainMenu.Item icon={<IconDownload size={16} stroke={1.75} />} onSelect={saveToFile}>
             Save to file
@@ -398,14 +428,18 @@ function BoardEditor({ data, onGone }: { data: ReadyBoard; onGone: () => void })
           <MainMenu.DefaultItems.ChangeCanvasBackground />
           <MainMenu.DefaultItems.ClearCanvas />
         </MainMenu>
-        {/* Next to undo/redo on desktop; phones use the main menu item. */}
-        <Footer>
-          <div className="ud-slot ud-footer">
-            <SketchButton size="sm" icon={<IconTable size={18} stroke={1.75} />} onClick={openTableDialog}>
-              Table
-            </SketchButton>
-          </div>
-        </Footer>
+        {footerTools ? (
+          <Footer>
+            <div className="ud-slot ud-footer">
+              <SketchButton size="sm" icon={<IconTable size={18} stroke={1.75} />} onClick={openTableDialog}>
+                Table
+              </SketchButton>
+              <SketchButton size="sm" icon={<IconSitemap size={18} stroke={1.75} />} onClick={openTemplates}>
+                Templates
+              </SketchButton>
+            </div>
+          </Footer>
+        ) : null}
         <WelcomeScreen>
           <WelcomeScreen.Hints.MenuHint />
           <WelcomeScreen.Hints.ToolbarHint />
@@ -430,7 +464,7 @@ function BoardEditor({ data, onGone }: { data: ReadyBoard; onGone: () => void })
         </WelcomeScreen>
       </>
     ),
-    [backToBoards, saveToFile, setting, setTheme, isOwner, openTableDialog],
+    [backToBoards, saveToFile, setting, setTheme, isOwner, openTableDialog, openTemplates, footerTools],
   );
 
   return (
@@ -448,10 +482,15 @@ function BoardEditor({ data, onGone }: { data: ReadyBoard; onGone: () => void })
           UIOptions={UI_OPTIONS}
           validateEmbeddable={EMBED_ALLOW_LIST}
           renderTopRightUI={renderTopRightUI}
+          onPaste={tables.onPaste}
         >
           {children}
         </Excalidraw>
+        <TableBar controller={tables} />
       </div>
+      {toolbar.slot
+        ? createPortal(<TableToolbarButtons controller={tables} onTemplates={openTemplates} />, toolbar.slot)
+        : null}
       {rename ? (
         <RenameDialog
           open={renameOpen}
@@ -460,7 +499,16 @@ function BoardEditor({ data, onGone }: { data: ReadyBoard; onGone: () => void })
           onRename={rename}
         />
       ) : null}
-      {tableOpen ? <InsertTableDialog onClose={() => setTableOpen(false)} onInsert={addTable} /> : null}
+      {tableOpen ? (
+        <InsertTableDialog
+          paper={api ? paperColor(api.getAppState()) : "#ffffff"}
+          onClose={() => setTableOpen(false)}
+          onInsert={addTable}
+        />
+      ) : null}
+      {templatesOpen ? (
+        <TemplatesDialog onClose={() => setTemplatesOpen(false)} onPick={addTemplate} />
+      ) : null}
       {shareOpen ? (
         <ShareDialog
           open

@@ -1,35 +1,16 @@
 import { useRef, useState, type FormEvent } from "react";
 import { SketchButton, SketchDialog, SketchInput } from "../../../components/sketch";
-import { TABLE_LIMITS, type TableOptions } from "./table";
-
-const OPTIONS_KEY = "ud:table-options";
-const DEFAULTS: TableOptions = { rows: 3, cols: 2, header: true, checkboxes: true };
-
-/** Last-used options on this device, like the drawing style (EDIT-5). */
-function loadOptions(): TableOptions {
-  try {
-    const saved = JSON.parse(localStorage.getItem(OPTIONS_KEY) ?? "null") as Partial<TableOptions> | null;
-    if (!saved || typeof saved !== "object") return DEFAULTS;
-    const inRange = (v: unknown, { min, max }: { min: number; max: number }) =>
-      Number.isInteger(v) && (v as number) >= min && (v as number) <= max;
-    return {
-      rows: inRange(saved.rows, TABLE_LIMITS.rows) ? saved.rows! : DEFAULTS.rows,
-      cols: inRange(saved.cols, TABLE_LIMITS.cols) ? saved.cols! : DEFAULTS.cols,
-      header: typeof saved.header === "boolean" ? saved.header : DEFAULTS.header,
-      checkboxes: typeof saved.checkboxes === "boolean" ? saved.checkboxes : DEFAULTS.checkboxes,
-    };
-  } catch {
-    return DEFAULTS;
-  }
-}
-
-function saveOptions(options: TableOptions) {
-  try {
-    localStorage.setItem(OPTIONS_KEY, JSON.stringify(options));
-  } catch {
-    // ignore
-  }
-}
+import { ALIGN_OPTIONS, WIDTH_OPTIONS } from "./lookOptions";
+import {
+  BORDER_COLORS,
+  FILL_COLORS,
+  TABLE_LIMITS,
+  loadSetup,
+  saveSetup,
+  type LookChoice,
+  type TableSetup,
+} from "./options";
+import { Segmented, Swatches } from "./Swatches";
 
 /** A whole number within limits, or null. */
 function parseCount(raw: string, { min, max }: { min: number; max: number }): number | null {
@@ -37,21 +18,26 @@ function parseCount(raw: string, { min, max }: { min: number; max: number }): nu
   return raw.trim() !== "" && Number.isInteger(n) && n >= min && n <= max ? n : null;
 }
 
-/** Footer "Table" button / Main menu → "Insert table…" (EDIT-7). Mount it only while open. */
+/** Main menu → "Insert table…", or the footer fallback (EDIT-7). Mount it only while open. */
 export function InsertTableDialog({
+  paper,
   onClose,
   onInsert,
 }: {
+  /** The canvas color, shown on the "Canvas color" chip. */
+  paper: string;
   onClose: () => void;
-  onInsert: (options: TableOptions) => void;
+  onInsert: (setup: TableSetup) => void;
 }) {
-  const [initial] = useState(loadOptions);
+  const [initial] = useState(loadSetup);
   const [rows, setRows] = useState(String(initial.rows));
   const [cols, setCols] = useState(String(initial.cols));
   const [header, setHeader] = useState(initial.header);
   const [checkboxes, setCheckboxes] = useState(initial.checkboxes);
+  const [look, setLook] = useState<LookChoice>(initial.look);
   const [showErrors, setShowErrors] = useState(false);
   const rowsRef = useRef<HTMLInputElement>(null);
+  const change = (patch: Partial<LookChoice>) => setLook((l) => ({ ...l, ...patch }));
 
   const rowCount = parseCount(rows, TABLE_LIMITS.rows);
   const colCount = parseCount(cols, TABLE_LIMITS.cols);
@@ -62,9 +48,9 @@ export function InsertTableDialog({
       setShowErrors(true);
       return;
     }
-    const options = { rows: rowCount, cols: colCount, header, checkboxes };
-    saveOptions(options);
-    onInsert(options);
+    const setup = { rows: rowCount, cols: colCount, header, checkboxes, look };
+    saveSetup(setup);
+    onInsert(setup);
     onClose();
   };
 
@@ -75,7 +61,7 @@ export function InsertTableDialog({
       title="Insert a table"
       seedKey="table"
       initialFocusRef={rowsRef}
-      width={420}
+      width={480}
     >
       <form onSubmit={submit} className="flex flex-col gap-6" noValidate>
         <div className="grid grid-cols-2 gap-4">
@@ -115,7 +101,47 @@ export function InsertTableDialog({
             Checkbox at the start of each row
           </label>
         </div>
-        <p className="ud-field__hint">Double-click a cell to type in it. Click a box to tick it.</p>
+        <div className="flex flex-col gap-3">
+          <Swatches
+            label="Header color"
+            value={look.headerFill}
+            colors={FILL_COLORS}
+            paper={paper}
+            onChange={(headerFill) => change({ headerFill })}
+            disabled={!header}
+          />
+          <Swatches
+            label="Cell color"
+            value={look.cellFill}
+            colors={FILL_COLORS}
+            paper={paper}
+            onChange={(cellFill) => change({ cellFill })}
+          />
+          <Swatches
+            label="Border color"
+            value={look.border}
+            colors={BORDER_COLORS}
+            paper={paper}
+            onChange={(border) => change({ border })}
+          />
+          <div className="flex flex-wrap gap-x-6 gap-y-3">
+            <Segmented
+              label="Border width"
+              value={look.borderWidth}
+              options={WIDTH_OPTIONS}
+              onChange={(borderWidth) => change({ borderWidth })}
+            />
+            <Segmented
+              label="Text"
+              value={look.align}
+              options={ALIGN_OPTIONS}
+              onChange={(align) => change({ align })}
+            />
+          </div>
+        </div>
+        <p className="ud-field__hint">
+          Double-click a cell to type in it, and click a box to tick it. Drag the grid lines to resize.
+        </p>
         <div className="flex justify-end gap-3">
           <SketchButton onClick={onClose}>Cancel</SketchButton>
           <SketchButton type="submit" variant="primary">

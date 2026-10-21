@@ -29,6 +29,21 @@ if (!window.matchMedia) {
     }) as MediaQueryList;
 }
 
+// jsdom has no FontFace; Excalidraw registers its fonts with it before measuring text.
+if (typeof globalThis.FontFace === "undefined") {
+  globalThis.FontFace = class {
+    status = "loaded";
+    constructor(
+      public family: string,
+      public source: string,
+      public descriptors: Record<string, string> = {},
+    ) {}
+    load() {
+      return Promise.resolve(this);
+    }
+  } as unknown as typeof FontFace;
+}
+
 // <dialog> showModal/close (jsdom implements the element but not modality).
 if (typeof HTMLDialogElement !== "undefined" && !HTMLDialogElement.prototype.showModal) {
   HTMLDialogElement.prototype.showModal = function showModal(this: HTMLDialogElement) {

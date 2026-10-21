@@ -295,6 +295,329 @@
   outline-offset: 3px;
 }
 
+/* ---------- Color chips and segmented choices (EDIT-7) ------------------ */
+
+.ud-swatches,
+.ud-segmented {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.ud-swatches:disabled {
+  opacity: 0.45;
+}
+.ud-swatches__label {
+  flex: 0 0 104px;
+  padding: 0;
+  color: var(--ud-ink);
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 600;
+}
+.ud-swatches__chips,
+.ud-segmented__options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.ud-swatch {
+  display: inline-flex;
+  cursor: pointer;
+}
+.ud-swatches:disabled .ud-swatch {
+  cursor: not-allowed;
+}
+.ud-swatch__chip,
+.ud-swatch__picker {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ud-ink) 25%, transparent);
+}
+/* "Canvas color" looks like the canvas, so a dashed edge tells it apart. */
+.ud-swatch__chip[data-paper] {
+  box-shadow: none;
+  outline: 1px dashed var(--ud-ink-muted);
+  outline-offset: -1px;
+}
+.ud-swatch input:checked + .ud-swatch__chip,
+.ud-swatch__picker[data-picked] {
+  box-shadow:
+    0 0 0 2px var(--ud-surface),
+    0 0 0 4px var(--ud-primary);
+}
+.ud-swatch input:focus-visible + .ud-swatch__chip {
+  outline: 2px solid var(--ud-primary);
+  outline-offset: 4px;
+}
+/* The custom picker shows a rainbow until a custom color is chosen. */
+.ud-swatch__picker {
+  padding: 0;
+  border: 0;
+  background: conic-gradient(#e03131, #f08c00, #ffec99, #2f9e44, #1971c2, #9c36b5, #e03131);
+  cursor: pointer;
+}
+.ud-swatch__picker::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+.ud-swatch__picker::-webkit-color-swatch {
+  border: 0;
+  border-radius: 6px;
+}
+.ud-swatch__picker::-moz-color-swatch {
+  border: 0;
+  border-radius: 6px;
+}
+.ud-swatch__picker:not([data-picked])::-webkit-color-swatch {
+  opacity: 0;
+}
+.ud-swatch__picker:not([data-picked])::-moz-color-swatch {
+  opacity: 0;
+}
+
+.ud-segmented__option {
+  cursor: pointer;
+}
+.ud-segmented__face {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  height: 32px;
+  padding: 0 8px;
+  border-radius: 8px;
+  color: var(--ud-ink);
+  font-size: 14px;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ud-ink) 20%, transparent);
+}
+.ud-segmented__option input:checked + .ud-segmented__face {
+  background: var(--ud-primary-soft);
+  color: var(--ud-primary);
+  box-shadow: inset 0 0 0 2px var(--ud-primary);
+}
+.ud-segmented__option input:focus-visible + .ud-segmented__face {
+  outline: 2px solid var(--ud-primary);
+  outline-offset: 2px;
+}
+
+/* ---------- Table bar, active cell, table tool preview (EDIT-7) --------- */
+
+/* Above the canvas, below Excalidraw's menus and dialogs (like .ud-mobile-status). */
+.ud-tablebar.ud-sketch {
+  --ud-sketch-fill: var(--ud-surface);
+  --ud-so: 3px;
+  position: absolute;
+  z-index: 3;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  max-width: calc(100vw - 16px);
+  padding: 4px 6px;
+  color: var(--ud-ink);
+  font-family: var(--ud-font-ui);
+}
+.ud-tablebar .ud-iconbtn.ud-sketch {
+  width: 34px;
+  height: 34px;
+}
+.ud-tablebar .ud-iconbtn.ud-sketch[aria-pressed="true"] {
+  color: var(--ud-primary);
+}
+.ud-tablebar .ud-iconbtn.ud-sketch[aria-pressed="true"] > .ud-sketch__art {
+  opacity: 1;
+}
+.ud-tablebar__divider {
+  width: 1px;
+  height: 22px;
+  margin: 0 4px;
+  background: color-mix(in srgb, var(--ud-ink) 18%, transparent);
+}
+.ud-tablebar__panel.ud-sketch {
+  --ud-sketch-fill: var(--ud-surface);
+  --ud-so: 4px;
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: max-content;
+  max-width: calc(100vw - 16px);
+  padding: 14px 16px;
+}
+.ud-tablebar__panel[data-up] {
+  top: auto;
+  bottom: calc(100% + 10px);
+}
+.ud-tablebar__sizes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+.ud-sizefield {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ud-sizefield .ud-swatches__label {
+  flex: none;
+}
+.ud-sizefield input {
+  width: 72px;
+  padding: 4px 6px;
+  border: 1px solid color-mix(in srgb, var(--ud-ink) 30%, transparent);
+  border-radius: 6px;
+  background: var(--ud-surface);
+  color: var(--ud-ink);
+  font-family: var(--ud-font-ui);
+  font-size: 14px;
+  line-height: 20px;
+}
+.ud-sizefield input:disabled {
+  color: var(--ud-ink-faint);
+}
+.ud-table-active {
+  position: absolute;
+  z-index: 3;
+  border-radius: 2px;
+  outline: 2px dashed var(--ud-primary);
+  outline-offset: -2px;
+  pointer-events: none;
+}
+.ud-table-draft {
+  position: absolute;
+  z-index: 3;
+  border: 2px dashed var(--ud-primary);
+  background: color-mix(in srgb, var(--ud-primary-soft) 45%, transparent);
+  pointer-events: none;
+}
+.ud-table-draft__col {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-left: 1px dashed var(--ud-primary);
+}
+.ud-table-draft__row {
+  position: absolute;
+  right: 0;
+  left: 0;
+  border-top: 1px dashed var(--ud-primary);
+}
+.ud-table-draft__label {
+  position: absolute;
+  right: -2px;
+  bottom: -30px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--ud-primary);
+  color: var(--ud-on-primary);
+  font-family: var(--ud-font-ui);
+  font-size: 13px;
+  line-height: 20px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* The line that follows a grid-line drag; the table resizes on release. */
+.ud-table-guide {
+  position: absolute;
+  z-index: 3;
+  pointer-events: none;
+}
+.ud-table-guide[data-kind="col"] {
+  border-left: 2px solid var(--ud-primary);
+  margin-left: -1px;
+}
+.ud-table-guide[data-kind="row"] {
+  border-top: 2px solid var(--ud-primary);
+  margin-top: -1px;
+}
+.ud-table-guide__label {
+  position: absolute;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--ud-primary);
+  color: var(--ud-on-primary);
+  font-family: var(--ud-font-ui);
+  font-size: 13px;
+  line-height: 20px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.ud-table-guide[data-kind="col"] .ud-table-guide__label {
+  bottom: -30px;
+  left: 0;
+  transform: translateX(-50%);
+}
+.ud-table-guide[data-kind="row"] .ud-table-guide__label {
+  top: 0;
+  right: -12px;
+  transform: translate(100%, -50%);
+}
+
+/* ---------- Flowchart templates (EDIT-8) --------------------------------- */
+
+.ud-templates {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 16px;
+}
+.ud-template.ud-sketch {
+  --ud-sketch-fill: var(--ud-surface);
+  --ud-so: 3px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  width: 100%;
+  padding: 10px 10px 12px;
+  border: 0;
+  background: none;
+  color: var(--ud-ink);
+  font-family: var(--ud-font-ui);
+  text-align: left;
+  cursor: pointer;
+  transition: transform 80ms ease-out;
+}
+.ud-template.ud-sketch:hover {
+  --ud-sketch-fill: var(--ud-primary-soft);
+  transform: translate(-1px, -1px);
+}
+.ud-template.ud-sketch:active {
+  transform: translate(1px, 1px);
+}
+/* Previews are drawn light, like board thumbnails (§3.3), on the same paper well. */
+.ud-template__preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 140px;
+  margin-bottom: 8px;
+  padding: 6px;
+  border-radius: 4px;
+  background: var(--ud-thumb-well);
+  overflow: hidden;
+}
+.ud-template__preview svg {
+  max-width: 100%;
+  max-height: 100%;
+}
+.ud-template__name {
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 600;
+}
+.ud-template__description {
+  color: var(--ud-ink-muted);
+  font-size: 14px;
+  line-height: 20px;
+}
+
 /* ---------- Box / card -------------------------------------------------- */
 
 .ud-box {
@@ -674,10 +997,12 @@
   pointer-events: auto;
 }
 
-/* Footer slot, next to undo/redo: the "Table" button (EDIT-7). */
+/* Footer slot, next to undo/redo: table and template buttons, only when
+   Excalidraw's toolbar can't take them (EDIT-7/8). */
 .ud-footer {
   display: flex;
   align-items: center;
+  gap: 8px;
   pointer-events: auto;
 }
 

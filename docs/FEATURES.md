@@ -52,6 +52,7 @@ This doc lists what Uncle Draw does, for whom, and when. Each feature has an ID,
 | EDIT-5 | Remember my view and last-used style | v1 | P1 |
 | EDIT-6 | Mermaid → diagram | v1.1 | P2 |
 | EDIT-7 | Tables with checkboxes | v1.1 | P1 |
+| EDIT-8 | Flowchart templates | v1.1 | P1 |
 | SAVE-1 | Autosave to the cloud | v1 | P0 |
 | SAVE-2 | Save-status indicator | v1 | P0 |
 | SAVE-3 | Offline backup and recovery | v1 | P0 |
@@ -173,7 +174,7 @@ Everything `@excalidraw/excalidraw` 0.18.1 provides out of the box stays availab
 
 Acceptance:
 - [ ] Each tool above can be used on a Uncle Draw board, and the result survives a reload (SAVE-1).
-- [ ] We don't fork or patch Excalidraw. Customization uses props, slots and CSS variables only.
+- [ ] We don't fork or patch Excalidraw. Customization uses props, slots and CSS variables only. The one exception is the toolbar slot for the table and template tools (EDIT-7, EDIT-8): Excalidraw 0.18 has no API for extra tools, so our buttons sit after its eraser (found by test id). If that can't be found, the same tools appear in the footer.
 
 ### EDIT-2 · Hand-drawn defaults · v1 · P0
 *As a user, I want new drawings to look hand-sketched without fiddling with settings.*
@@ -200,15 +201,44 @@ Acceptance:
 - [ ] No AI text-to-diagram (see Non-goals).
 
 ### EDIT-7 · Tables with checkboxes · v1.1 · P1
-*As a user, I want to drop a table on my board, type in its cells and tick rows off.*
-- The footer's **Table** button (desktop) or Main menu → "Insert table…" opens a dialog: rows (1–30), columns (1–12), a shaded header row, and a checkbox at the start of each row. The choices are remembered on this device.
+*As a user, I want to drop a table on my board, shape it the way I need, type in its cells and tick rows off.*
+- **Making one:**
+  - The **Table** tool in the toolbar (shortcut **B**): drag on the canvas and the drag's size picks the rows and columns, with a live preview. A plain click drops the last-used size.
+  - Main menu → "Insert table…" opens a dialog: rows (1–30), columns (1–12), a header row, a checkbox at the start of each row, and the style (header color, cell color, border color, border width, text alignment). The choices are remembered on this device and the tool uses them too.
+- **Shaping it:**
+  - Selecting a table shows a **table bar** above it. It can insert a row above or below, insert a column left or right, delete a row or column, turn the header row or checkbox column on or off, align the text left, center or right, and delete the table.
+  - Its **style panel** sets the header color, cell color, border color and border width. It also sets an exact width for the active cell's column and an exact height for its row.
+  - Row and column actions apply to the clicked (or selected) cell, which is outlined.
+  - **Dragging a grid line** resizes that column or row. A guide shows the new size, and the table changes on release.
+- **Filling it:**
+  - Double-click a cell to type in it.
+  - **Pasting** several lines into a selected table, or while typing in a cell, puts one line per row and one tab-separated value per column, adding rows and columns as needed.
+  - List bullets are dropped, and `[x]` / `[ ]` checklist items tick the row's box.
 - A table is ordinary Excalidraw shapes in one group: cell rectangles with bound text, small checkbox squares, and pen-style ticks. It saves, syncs live, undoes, exports and shows in share views like any other drawing, and it keeps the board's sketchy style.
 
 Acceptance:
 - [ ] Clicking a checkbox ticks or unticks it without selecting or moving the table. Shift/Ctrl/Alt-click still selects the box itself. Each tick is one undo step.
-- [ ] Double-clicking a cell starts typing in it. Double-clicking a checkbox never drops a stray text box.
-- [ ] When text wraps and makes a cell taller, the whole row grows and the rows below move down. Rows don't shrink on their own.
+- [ ] Double-clicking a cell starts typing in it. Double-clicking a checkbox or a grid line never drops a stray text box.
+- [ ] When text wraps and makes a cell taller, the whole row grows and the rows below move down. Rows grow to fit their text but never shrink below it.
+- [ ] Every table bar action, a grid-line drag, and a paste are each one undo step.
+- [ ] Adding or removing the header row or checkbox column leaves the rest of the table where it was.
 - [ ] Ticks survive a reload, reach collaborators live, and show (read-only) in share views.
+
+### EDIT-8 · Flowchart templates · v1.1 · P1
+*As a user, I want to start a flowchart from a ready-made shape instead of drawing every box and arrow.*
+- The **Flowchart templates** button in the toolbar (after the Table tool), or Main menu → "Flowchart templates…", opens a picker with a live preview of each template:
+  - Simple process
+  - Left to right
+  - Yes or no
+  - Repeat until done
+  - Three-way choice
+  - Swimlanes
+- The pick drops into the middle of the view, selected, in the current stroke color, width, sloppiness, fill style and font. Ends are green, steps blue and questions yellow.
+
+Acceptance:
+- [ ] Every shape, label and arrow is an ordinary, editable Excalidraw element. Arrows are bound to their shapes, so they follow when a step moves.
+- [ ] Inserting is one undo step, and each insert gets fresh ids, so the same template can be used twice on a board.
+- [ ] Phones reach the templates from the main menu (their toolbar has no room for the button).
 
 ---
 

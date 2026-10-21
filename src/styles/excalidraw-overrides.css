@@ -33,6 +33,16 @@
   min-width: 156px;
 }
 
+/* Our table and template tools inside Excalidraw's toolbar row (EDIT-7/8): the
+   slot takes no box of its own, so its buttons line up as toolbar items. */
+.ud-toolbar-tools {
+  display: contents;
+}
+/* Phones have a tight toolbar; templates are in the main menu there. */
+.excalidraw.excalidraw--mobile .ud-toolbar-templates {
+  display: none;
+}
+
 /* Phones: Excalidraw pads its hint text to clear the tool column on the right;
    clear our save status on the left the same way. */
 .ud-editor .excalidraw--mobile.excalidraw .HintViewer {
