@@ -11,6 +11,7 @@ const LOOK: TableLook = {
   borderWidth: 1,
   align: "center",
   roughness: 1,
+  dimDone: false,
 };
 const FONT = { fontSize: 20, fontFamily: 5, strokeColor: "#1e1e1e" };
 

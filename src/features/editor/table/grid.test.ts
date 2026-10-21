@@ -6,12 +6,17 @@ import {
   DEFAULT_HEADER_FILL,
   buildTable,
   commit,
+  DIM_OPACITY,
   deleteCol,
+  deleteCols,
   deleteRow,
+  deleteRows,
   edgeAt,
   fill,
   insertCol,
+  highlight,
   insertRow,
+  moveRow,
   readPlan,
   resizeCol,
   resizeRow,
@@ -19,6 +24,7 @@ import {
   setHeader,
   setLook,
   slotAt,
+  sortRows,
   tidy,
   type Plan,
   type TableLook,
@@ -43,6 +49,7 @@ const LOOK: TableLook = {
   borderWidth: 1,
   align: "center",
   roughness: 1,
+  dimDone: false,
 };
 const FONT = { fontSize: 20, fontFamily: 5, strokeColor: "#1e1e1e" };
 const AT = { x: 100, y: 200 };
@@ -375,5 +382,113 @@ describe("bindings", () => {
     const next = edit(bound, (p) => fill(p, 1, 1, [["Milk"]]));
     const after = next.find((el) => el.id === cell.id)!;
     expect(after.boundElements?.map((b) => b.type).sort()).toEqual(["arrow", "text"]);
+  });
+});
+
+describe("several rows and columns at once", () => {
+  it("deletes the rows and columns a selection spans, keeping one of each", () => {
+    const els = edit(todo({ rows: 4, cols: 3 }), (p) => fill(p, 1, 1, [["a"], ["b"], ["c"], ["d"]]));
+    const next = edit(els, (p) => deleteRows(p, [2, 3, 2]));
+    expect(
+      texts(next)
+        .map((t) => t.originalText)
+        .sort(),
+    ).toEqual(["a", "d"]);
+    const p = plan(next);
+    expect(p.rowH).toHaveLength(3);
+    // Can't delete every body row or text column.
+    const q = plan(next);
+    deleteRows(q, [1, 2]);
+    expect(q.rowH).toHaveLength(2);
+    deleteCols(q, [1, 2, 3]);
+    expect(q.colW).toHaveLength(2);
+  });
+});
+
+describe("sorting and moving rows", () => {
+  const values = (els: readonly El[]) =>
+    plan(els)
+      .slots.slice(1)
+      .map((row) => row[1]!.text?.originalText ?? "");
+
+  it("sorts text naturally, numbers by value, empty cells last", () => {
+    const els = edit(todo({ rows: 5 }), (p) =>
+      fill(p, 1, 1, [["Item 10"], [""], ["item 2"], ["Apple"], ["Item 1"]]),
+    );
+    expect(values(edit(els, (p) => sortRows(p, 1, "asc")))).toEqual([
+      "Apple",
+      "Item 1",
+      "item 2",
+      "Item 10",
+      "",
+    ]);
+    expect(values(edit(els, (p) => sortRows(p, 1, "desc")))).toEqual([
+      "Item 10",
+      "item 2",
+      "Item 1",
+      "Apple",
+      "",
+    ]);
+    const nums = edit(todo({ rows: 3 }), (p) => fill(p, 1, 1, [["1,200"], ["30"], ["4"]]));
+    expect(values(edit(nums, (p) => sortRows(p, 1, "asc")))).toEqual(["4", "30", "1,200"]);
+  });
+
+  it("sorts by the checkbox column: open items first", () => {
+    let els = edit(todo({ rows: 3 }), (p) =>
+      fill(p, 1, 1, [["done"], ["open"], ["also done"]], [true, false, true]),
+    );
+    els = edit(els, (p) => sortRows(p, 0, "asc"));
+    expect(values(els)).toEqual(["open", "done", "also done"]);
+    // The ticks moved with their rows.
+    const p = plan(els);
+    expect(p.slots.slice(1).map((row) => isTicked(els, row[0]!.box!))).toEqual([false, true, true]);
+  });
+
+  it("moves a row, never above the header", () => {
+    const els = edit(todo({ rows: 3 }), (p) => fill(p, 1, 1, [["a"], ["b"], ["c"]]));
+    expect(values(edit(els, (p) => moveRow(p, 3, 1)))).toEqual(["c", "a", "b"]);
+    expect(values(edit(els, (p) => moveRow(p, 1, 4)))).toEqual(["b", "c", "a"]);
+    expect(values(edit(els, (p) => moveRow(p, 2, 0)))).toEqual(["b", "a", "c"]);
+    const p = plan(els);
+    expect(moveRow(p, 0, 3)).toBe(false); // the header stays put
+  });
+});
+
+describe("highlights and dimming", () => {
+  it("gives cells their own fill, which survives table-wide recoloring and can be removed", () => {
+    const els = edit(todo(), (p) => highlight(p, [{ row: 1, col: 1 }], "#ffc9c9"));
+    expect(cellIn(els, 1, 1).backgroundColor).toBe("#ffc9c9");
+    expect(plan(els).look.cellFill).toBe("#ffffff"); // the table's own color is unchanged
+    const recolored = edit(els, (p) => setLook(p, { cellFill: "#ffec99" }));
+    expect(cellIn(recolored, 1, 1).backgroundColor).toBe("#ffc9c9");
+    expect(cellIn(recolored, 2, 1).backgroundColor).toBe("#ffec99");
+    const cleared = edit(recolored, (p) => highlight(p, [{ row: 1, col: 1 }], null));
+    expect(cellIn(cleared, 1, 1).backgroundColor).toBe("#ffec99");
+  });
+
+  it("fades ticked rows when the table dims them, and brings them back", () => {
+    let els = edit(todo(), (p) => {
+      setLook(p, { dimDone: true });
+      fill(p, 1, 1, [["Milk"], ["Eggs"]], [true, false]);
+    });
+    const opacity = (text: string) => texts(els).find((t) => t.originalText === text)!.opacity;
+    expect([opacity("Milk"), opacity("Eggs")]).toEqual([DIM_OPACITY, 100]);
+    els = edit(els, (p) => setLook(p, { dimDone: false }));
+    expect(opacity("Milk")).toBe(100);
+    expect(plan(els).look.dimDone).toBe(false);
+  });
+});
+
+describe("pasting spreadsheet text into a checklist", () => {
+  it("reads a TRUE / FALSE first column as ticks", () => {
+    const els = edit(todo(), (p) =>
+      fill(p, 1, 1, [
+        ["TRUE", "Milk"],
+        ["false", "Eggs"],
+      ]),
+    );
+    const p = plan(els);
+    expect(p.slots.slice(1).map((row) => row[1]!.text?.originalText)).toEqual(["Milk", "Eggs"]);
+    expect(p.slots.slice(1).map((row) => isTicked(els, row[0]!.box!))).toEqual([true, false]);
   });
 });

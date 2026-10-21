@@ -556,6 +556,81 @@
   outline-offset: 3px;
 }
 
+/* Cells picked with Shift / Ctrl-click. */
+.ud-table-picked {
+  position: absolute;
+  z-index: 3;
+  background: color-mix(in srgb, var(--ud-primary) 14%, transparent);
+  pointer-events: none;
+}
+.ud-floatbar__progress {
+  padding: 0 6px;
+  color: var(--ud-ink-muted);
+  font-size: 13px;
+  line-height: 20px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.ud-floatbar__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.ud-textlink {
+  padding: 2px 4px;
+  border: 0;
+  background: none;
+  color: var(--ud-primary);
+  font-family: var(--ud-font-ui);
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.ud-textlink:disabled {
+  color: var(--ud-ink-faint);
+  cursor: not-allowed;
+}
+/* The grip left of the active row, and where a dragged row would land. */
+.ud-row-grip {
+  position: absolute;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: var(--ud-surface);
+  color: var(--ud-ink-muted);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--ud-ink) 20%, transparent);
+  cursor: grab;
+  touch-action: none;
+}
+.ud-row-grip:hover,
+.ud-row-grip:focus-visible {
+  color: var(--ud-primary);
+}
+.ud-row-grip:focus-visible {
+  outline: 2px solid var(--ud-primary);
+  outline-offset: 2px;
+}
+.ud-row-grip:active {
+  cursor: grabbing;
+}
+.ud-row-drop {
+  position: absolute;
+  z-index: 3;
+  height: 0;
+  margin-top: -1px;
+  border-top: 3px solid var(--ud-primary);
+  pointer-events: none;
+}
+
 /* The line that follows a grid-line drag; the table resizes on release. */
 .ud-table-guide {
   position: absolute;
@@ -594,6 +669,47 @@
 }
 
 /* ---------- Flowchart templates (EDIT-8) --------------------------------- */
+
+/* Many templates: the list scrolls inside the dialog. */
+.ud-templates__scroll {
+  max-height: min(68vh, 640px);
+  margin: 0 -8px;
+  padding: 4px 8px 8px;
+  overflow-y: auto;
+}
+.ud-templates__section + .ud-templates__section {
+  margin-top: 24px;
+}
+.ud-templates__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.ud-templates__heading {
+  margin: 0 0 12px;
+  color: var(--ud-ink);
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 600;
+}
+.ud-templates__head .ud-templates__heading {
+  margin: 0;
+}
+/* A saved template's remove button sits on its card. */
+.ud-template__mine {
+  position: relative;
+}
+.ud-template__mine .ud-template__remove.ud-sketch {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 32px;
+  height: 32px;
+  background: var(--ud-surface);
+}
 
 .ud-templates {
   display: grid;

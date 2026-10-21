@@ -47,7 +47,14 @@ describe("InsertTableDialog", () => {
       cols: 4,
       header: true,
       checkboxes: false,
-      look: { headerFill: "#a5d8ff", cellFill: "#ffec99", border: "#1971c2", borderWidth: 2, align: "left" },
+      look: {
+        headerFill: "#a5d8ff",
+        cellFill: "#ffec99",
+        border: "#1971c2",
+        borderWidth: 2,
+        align: "left",
+        dimDone: true,
+      },
     };
     expect(onInsert).toHaveBeenCalledWith(picked);
 

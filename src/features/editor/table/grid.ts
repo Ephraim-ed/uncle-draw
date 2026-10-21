@@ -6,6 +6,8 @@ import {
   CELL_WIDTH,
   CHECK_COLUMN_WIDTH,
   CHECK_KEY,
+  DIM_KEY,
+  FILL_KEY,
   HEADER_KEY,
   PART_KEY,
   ROW_HEIGHT,
@@ -38,6 +40,8 @@ export interface TableLook {
   borderWidth: number;
   align: Align;
   roughness: number;
+  /** Fade the text of ticked rows (checkbox tables). */
+  dimDone: boolean;
 }
 
 /** Font for text the table writes itself (pasted values). */
@@ -83,6 +87,11 @@ export const MAX_ROWS = 100;
 export const MAX_COLS = 26;
 /** Cells this close (scene px) share a row or column. */
 const SNAP = 2;
+/**
+ * Opacity of a ticked row's text. Excalidraw's slider moves in steps of 10,
+ * so 35 also marks text the table dimmed (and may brighten again).
+ */
+export const DIM_OPACITY = 35;
 
 interface Slot {
   cell: El | null;
@@ -93,6 +102,8 @@ interface Slot {
   ticks: El[];
   /** Ticked or not after the commit; undefined keeps it. */
   tick?: boolean;
+  /** The cell's own fill: a color, null to drop it, undefined to keep it. */
+  fill?: string | null;
 }
 
 export interface Plan {
@@ -188,6 +199,7 @@ export function readPlan(elements: readonly El[], groupId: string, font: TextSty
       borderWidth: 1,
       align: "center",
       roughness: 1,
+      dimDone: false,
     },
     font,
     removed: [],
@@ -213,12 +225,14 @@ export function readPlan(elements: readonly El[], groupId: string, font: TextSty
 
   plan.header = slots[0]!.some((s) => s.cell?.customData?.[HEADER_KEY] === true);
   plan.checkCol = slots.some((row) => row[0]!.cell?.customData?.[CHECK_KEY] === true || row[0]!.box !== null);
+  // The table's colors come from cells without a highlight of their own.
+  const plainFirst = (row: readonly Slot[]) =>
+    row.find((s) => s.cell && s.cell.customData?.[FILL_KEY] === undefined)?.cell ??
+    row.find((s) => s.cell)?.cell;
   const body =
-    slots
-      .slice(plan.header ? 1 : 0)
-      .flatMap((row) => row.slice(plan.checkCol ? 1 : 0))
-      .find((s) => s.cell)?.cell ?? cells[0]!;
-  const headerCell = plan.header ? slots[0]!.find((s) => s.cell)?.cell : undefined;
+    plainFirst(slots.slice(plan.header ? 1 : 0).flatMap((row) => row.slice(plan.checkCol ? 1 : 0))) ??
+    cells[0]!;
+  const headerCell = plan.header ? plainFirst(slots[0]!) : undefined;
   const align: unknown = body.customData?.[ALIGN_KEY];
   plan.look = {
     headerFill: headerCell?.backgroundColor ?? DEFAULT_HEADER_FILL,
@@ -227,6 +241,7 @@ export function readPlan(elements: readonly El[], groupId: string, font: TextSty
     borderWidth: body.strokeWidth,
     roughness: body.roughness,
     align: align === "left" || align === "right" ? align : "center",
+    dimDone: body.customData?.[DIM_KEY] === true,
   };
   const firstText = slots.flat().find((s) => s.text)?.text;
   if (firstText) {
@@ -479,6 +494,87 @@ export function setLook(p: Plan, look: Partial<TableLook>) {
   if (look.align) p.realign = "all";
 }
 
+/** Deletes several rows (highest first); stops at the last body row. */
+export function deleteRows(p: Plan, rows: Iterable<number>): boolean {
+  let any = false;
+  for (const r of [...new Set(rows)].sort((a, b) => b - a)) any = deleteRow(p, r) || any;
+  return any;
+}
+
+/** Deletes several columns (rightmost first); stops at the last text column. */
+export function deleteCols(p: Plan, cols: Iterable<number>): boolean {
+  let any = false;
+  for (const c of [...new Set(cols)].sort((a, b) => b - a)) any = deleteCol(p, c) || any;
+  return any;
+}
+
+/** Gives cells their own fill (a highlight), or drops it with null. */
+export function highlight(p: Plan, cells: readonly { row: number; col: number }[], fill: string | null) {
+  for (const { row, col } of cells) {
+    const slot = p.slots[row]?.[col];
+    if (slot) slot.fill = fill;
+  }
+}
+
+/** Empties cells' text; checkbox cells keep their boxes. */
+export function clearCells(p: Plan, cells: readonly { row: number; col: number }[]) {
+  for (const { row, col } of cells) {
+    const slot = p.slots[row]?.[col];
+    if (slot && !(p.checkCol && col === 0)) slot.value = "";
+  }
+}
+
+/** Whether row `r` is ticked. */
+export function isDone(p: Plan, r: number): boolean {
+  const slot = p.checkCol ? p.slots[r]?.[0] : undefined;
+  if (!slot?.box) return false;
+  return slot.tick ?? slot.ticks.length > 0;
+}
+
+const cellText = (s: Slot | undefined) => (s?.value ?? s?.text?.originalText ?? "").trim();
+
+/**
+ * Sorts the body rows by a column: text in natural order ("Item 2" before
+ * "Item 10"), numbers by value, empty cells last; the checkbox column puts
+ * open items first. Rows keep their order on ties.
+ */
+export function sortRows(p: Plan, col: number, dir: "asc" | "desc") {
+  const first = p.header ? 1 : 0;
+  const rows = p.slots
+    .slice(first)
+    .map((slots, i) => ({ slots, height: p.rowH[first + i]!, index: first + i }));
+  const key = (row: (typeof rows)[number]) =>
+    p.checkCol && col === 0 ? (isDone(p, row.index) ? "1" : "0") : cellText(row.slots[col]);
+  const compare = (a: string, b: string) => {
+    const x = Number(a.replace(/,/g, ""));
+    const y = Number(b.replace(/,/g, ""));
+    if (a !== "" && b !== "" && Number.isFinite(x) && Number.isFinite(y)) return x - y;
+    return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
+  };
+  rows.sort((a, b) => {
+    const ka = key(a);
+    const kb = key(b);
+    if (ka === "" || kb === "") return ka === kb ? a.index - b.index : ka === "" ? 1 : -1;
+    return (dir === "asc" ? compare(ka, kb) : compare(kb, ka)) || a.index - b.index;
+  });
+  p.slots.splice(first, rows.length, ...rows.map((r) => r.slots));
+  p.rowH.splice(first, rows.length, ...rows.map((r) => r.height));
+}
+
+/** Moves a body row so it lands before row `to` (as numbered now); never above the header. */
+export function moveRow(p: Plan, from: number, to: number): boolean {
+  const first = p.header ? 1 : 0;
+  if (from < first || from >= p.rowH.length) return false;
+  const target = clamp(to, first, p.rowH.length);
+  const at = target > from ? target - 1 : target;
+  if (at === from) return false;
+  const [slots] = p.slots.splice(from, 1);
+  const [height] = p.rowH.splice(from, 1);
+  p.slots.splice(at, 0, slots!);
+  p.rowH.splice(at, 0, height!);
+  return true;
+}
+
 /**
  * Writes `values` into the grid from (row, col): one row per line, one column
  * per tab. Adds rows and columns as needed; the checkbox column is skipped and
@@ -490,7 +586,13 @@ export function fill(
   col: number,
   values: readonly (readonly string[])[],
   ticks: readonly (boolean | undefined)[] = [],
-) {
+): void {
+  // Spreadsheet text copied from a checklist starts each row with TRUE / FALSE.
+  const bool = /^(true|false)$/i;
+  if (p.checkCol && values.length > 0 && values.every((line) => bool.test(line[0]?.trim() ?? ""))) {
+    ticks = values.map((line) => /^true$/i.test(line[0]!.trim()));
+    values = values.map((line) => line.slice(1));
+  }
   const c0 = Math.max(col, p.checkCol ? 1 : 0);
   const width = Math.max(0, ...values.map((v) => v.length));
   while (c0 + width > p.colW.length && insertCol(p, p.colW.length));
@@ -637,8 +739,13 @@ export function commit(elements: readonly El[], p: Plan, engine: TextEngine): El
       const data: Props = { ...cell.customData, [PART_KEY]: "cell", [ALIGN_KEY]: p.look.align };
       delete data[HEADER_KEY];
       delete data[CHECK_KEY];
+      delete data[DIM_KEY];
       if (isHeaderRow(r)) data[HEADER_KEY] = true;
       if (isCheckCol(c)) data[CHECK_KEY] = true;
+      if (p.look.dimDone) data[DIM_KEY] = true;
+      if (slot.fill === null) delete data[FILL_KEY];
+      else if (slot.fill !== undefined) data[FILL_KEY] = slot.fill;
+      const ownFill = typeof data[FILL_KEY] === "string" ? (data[FILL_KEY] as string) : undefined;
       // Keep other bindings (arrows drawn to the cell); only the text binding changes.
       const others = (cell.boundElements ?? []).filter((b) => b.type !== "text");
       const hadText = others.length !== (cell.boundElements ?? []).length;
@@ -654,7 +761,7 @@ export function commit(elements: readonly El[], p: Plan, engine: TextEngine): El
         y,
         width: w,
         height: h,
-        backgroundColor: isHeaderRow(r) ? p.look.headerFill : p.look.cellFill,
+        backgroundColor: ownFill ?? (isHeaderRow(r) ? p.look.headerFill : p.look.cellFill),
         fillStyle: "solid",
         strokeColor: p.look.border,
         strokeWidth: p.look.borderWidth,
@@ -665,6 +772,9 @@ export function commit(elements: readonly El[], p: Plan, engine: TextEngine): El
 
       const text = slot.text;
       if (text) {
+        // Ticked rows fade (if the table says so); text the table faded comes back.
+        const dim = p.look.dimDone && !isCheckCol(c) && !isHeaderRow(r) && isDone(p, r);
+        const opacity = dim ? DIM_OPACITY : text.opacity === DIM_OPACITY ? 100 : text.opacity;
         const realign = p.realign === "all" || p.realign.has(text.id) || touched.has(text.id);
         const align = (realign ? p.look.align : text.textAlign) as Align;
         put(text, {
@@ -676,6 +786,7 @@ export function commit(elements: readonly El[], p: Plan, engine: TextEngine): El
           textAlign: align,
           verticalAlign: "middle",
           containerId: cell.id,
+          opacity,
           x: alignedX(align, x, w, text.width),
           y: y + (h - text.height) / 2,
         });

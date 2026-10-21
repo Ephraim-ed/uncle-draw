@@ -1,5 +1,8 @@
 import {
+  IconArrowsSort,
   IconColumnInsertLeft,
+  IconCopy,
+  IconGripVertical,
   IconColumnInsertRight,
   IconColumnRemove,
   IconLayoutNavbar,
@@ -19,7 +22,7 @@ import {
   type MouseEvent,
   type ReactNode,
 } from "react";
-import { IconButton, SketchArt, hashSeed } from "../../../components/sketch";
+import { IconButton, SketchArt, SketchMenu, hashSeed, useToast } from "../../../components/sketch";
 import { leftEdge } from "../overlay";
 import type { Box, TableController, TableDraft, TableFocus, TableGuide } from "./controller";
 import { ALIGN_OPTIONS, WIDTH_OPTIONS } from "./lookOptions";
@@ -31,6 +34,8 @@ const TOP_SAFE = 72;
 const BOTTOM_SAFE = 72;
 const GAP = 12;
 const EDGE = 8;
+/** Colors a picked cell can be highlighted with (Excalidraw's light quick picks). */
+const HIGHLIGHTS = ["#ffc9c9", "#b2f2bb", "#a5d8ff", "#ffec99", "#e9ecef"] as const;
 
 /** Table tools on the canvas (EDIT-7): the bar over a selected table, its active cell, and the table tool's preview. */
 export function TableBar({ controller }: { controller: TableController }) {
@@ -154,6 +159,7 @@ function Bar({
   const ref = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [styleOpen, setStyleOpen] = useState(false);
+  const { toast } = useToast();
 
   useLayoutEffect(() => {
     const el = ref.current;
@@ -187,8 +193,30 @@ function Bar({
   const needsCell = focus.active ? "" : " (click a cell first)";
   const a = focus.activeBox;
 
+  const rows = focus.multiple ? "rows" : "row";
+  const cols = focus.multiple ? "columns" : "column";
+  const copy = (kind: "spreadsheet" | "markdown") => {
+    const copied = controller.copyText(kind);
+    if (!copied) return;
+    navigator.clipboard.writeText(copied.text).then(
+      () =>
+        toast({
+          message: `Copied ${copied.rows} ${copied.rows === 1 ? "row" : "rows"}${kind === "markdown" ? " as Markdown" : ""}.`,
+        }),
+      () => toast({ message: "Hmm, that didn't copy. Try again." }),
+    );
+  };
+
   return (
     <>
+      {focus.pickedBoxes.map((b, i) => (
+        <div
+          key={i}
+          className="ud-table-picked"
+          style={{ left: b.left, top: b.top, width: b.width, height: b.height }}
+          aria-hidden="true"
+        />
+      ))}
       {a ? (
         <div
           className="ud-table-active"
@@ -196,6 +224,7 @@ function Bar({
           aria-hidden="true"
         />
       ) : null}
+      <RowGrip focus={focus} onMove={controller.moveRow} />
       <div
         ref={ref}
         role="toolbar"
@@ -205,6 +234,14 @@ function Bar({
         onMouseDown={keepFocus}
       >
         <SketchArt seed={hashSeed("tablebar")} shape="rect" fillStyle="solid" shadow strokeWidth={1.5} />
+        {focus.progress ? (
+          <>
+            <span className="ud-floatbar__progress" role="status">
+              {focus.progress.done} of {focus.progress.total} done
+            </span>
+            <span className="ud-floatbar__divider" />
+          </>
+        ) : null}
         <BarButton label="Insert row above" onClick={() => controller.insertRow("above")}>
           <IconRowInsertTop {...ICON} />
         </BarButton>
@@ -212,7 +249,7 @@ function Bar({
           <IconRowInsertBottom {...ICON} />
         </BarButton>
         <BarButton
-          label={`Delete row${needsCell}`}
+          label={`Delete ${rows}${needsCell}`}
           onClick={controller.deleteRow}
           disabled={!focus.canDeleteRow}
         >
@@ -226,7 +263,7 @@ function Bar({
           <IconColumnInsertRight {...ICON} />
         </BarButton>
         <BarButton
-          label={`Delete column${needsCell}`}
+          label={`Delete ${cols}${needsCell}`}
           onClick={controller.deleteCol}
           disabled={!focus.canDeleteCol}
         >
@@ -259,6 +296,38 @@ function Bar({
           </BarButton>
         ))}
         <span className="ud-floatbar__divider" />
+        <SketchMenu
+          label="Sort rows"
+          seedKey="tablebar:sort"
+          align="end"
+          items={[
+            { label: "Sort A → Z", onSelect: () => controller.sort("asc"), disabled: !focus.active },
+            { label: "Sort Z → A", onSelect: () => controller.sort("desc"), disabled: !focus.active },
+          ]}
+          trigger={(props) => (
+            <IconButton {...props} label={`Sort by this column${needsCell}`} seedKey="tablebar:sort">
+              <IconArrowsSort {...ICON} />
+            </IconButton>
+          )}
+        />
+        <SketchMenu
+          label="Copy table"
+          seedKey="tablebar:copy"
+          align="end"
+          items={[
+            { label: "Copy for spreadsheets", onSelect: () => copy("spreadsheet") },
+            { label: "Copy as Markdown", onSelect: () => copy("markdown") },
+          ]}
+          trigger={(props) => (
+            <IconButton
+              {...props}
+              label={focus.multiple ? "Copy picked cells" : "Copy table"}
+              seedKey="tablebar:copy"
+            >
+              <IconCopy {...ICON} />
+            </IconButton>
+          )}
+        />
         <BarButton label="Table style" expanded={styleOpen} onClick={() => setStyleOpen((open) => !open)}>
           <IconPalette {...ICON} />
         </BarButton>
@@ -319,6 +388,34 @@ function StylePanel({
         options={WIDTH_OPTIONS}
         onChange={(borderWidth) => controller.setLook({ borderWidth })}
       />
+      <div className="ud-floatbar__row">
+        <Swatches
+          label={focus.multiple ? "Highlight cells" : "Highlight cell"}
+          value=""
+          colors={HIGHLIGHTS}
+          paper={paper}
+          onChange={(c) => controller.highlight(c)}
+          disabled={!focus.active}
+        />
+        <button
+          type="button"
+          className="ud-textlink"
+          onClick={() => controller.highlight(null)}
+          disabled={!focus.active}
+        >
+          None
+        </button>
+      </div>
+      {focus.checkCol ? (
+        <label className="ud-check">
+          <input
+            type="checkbox"
+            checked={focus.look.dimDone}
+            onChange={(e) => controller.setLook({ dimDone: e.target.checked })}
+          />
+          Dim ticked rows
+        </label>
+      ) : null}
       <div className="ud-floatbar__sizes">
         <SizeField
           label="Column width"
@@ -331,7 +428,9 @@ function StylePanel({
           onCommit={(v) => controller.setSize("height", v)}
         />
       </div>
-      {focus.active ? null : <p className="ud-field__hint">Click a cell to size its column and row.</p>}
+      {focus.active ? null : (
+        <p className="ud-field__hint">Click a cell to highlight it or size its column and row.</p>
+      )}
     </div>
   );
 }
@@ -373,5 +472,72 @@ function SizeField({
         }}
       />
     </label>
+  );
+}
+
+/**
+ * A grip by the active row: drag it to move the row (a line shows where it
+ * lands), or focus it and use the arrow keys.
+ */
+function RowGrip({ focus, onMove }: { focus: TableFocus; onMove: (from: number, to: number) => void }) {
+  const [drop, setDrop] = useState<number | null>(null);
+  const row = focus.active?.row;
+  if (row === undefined || (focus.header && row === 0)) return null;
+  const box = focus.rowBoxes[row];
+  if (!box) return null;
+  const first = focus.header ? 1 : 0;
+  const boxes = focus.rowBoxes;
+  /** The row the pointer would drop before, from its height in the editor. */
+  const dropAt = (y: number) => {
+    const i = boxes.findIndex((b) => y < b.top + b.height / 2);
+    return Math.max(first, i < 0 ? boxes.length : i);
+  };
+  const lineTop = (i: number) =>
+    i < boxes.length ? boxes[i]!.top : boxes[boxes.length - 1]!.top + boxes[boxes.length - 1]!.height;
+  return (
+    <>
+      <button
+        type="button"
+        className="ud-row-grip"
+        style={{ left: box.left - 26, top: box.top + box.height / 2 - 14 }}
+        aria-label="Move row (drag, or use the arrow keys)"
+        title="Drag to move this row"
+        onMouseDown={(e) => e.preventDefault()}
+        onPointerDown={(e) => {
+          e.preventDefault();
+          e.currentTarget.setPointerCapture(e.pointerId);
+          setDrop(row);
+        }}
+        onPointerMove={(e) => {
+          if (drop === null) return;
+          const origin =
+            (e.currentTarget.offsetParent as HTMLElement | null)?.getBoundingClientRect().top ?? 0;
+          setDrop(dropAt(e.clientY - origin));
+        }}
+        onPointerUp={() => {
+          if (drop !== null && drop !== row && drop !== row + 1) onMove(row, drop);
+          setDrop(null);
+        }}
+        onPointerCancel={() => setDrop(null)}
+        onKeyDown={(e) => {
+          if (e.key === "ArrowUp" && row > first) {
+            e.preventDefault();
+            onMove(row, row - 1);
+          } else if (e.key === "ArrowDown" && row < boxes.length - 1) {
+            e.preventDefault();
+            onMove(row, row + 2);
+          }
+        }}
+      >
+        <IconGripVertical size={16} stroke={1.75} />
+      </button>
+      {drop !== null && drop !== row && drop !== row + 1 ? (
+        <div
+          className="ud-row-drop"
+          style={{ left: box.left, top: lineTop(drop), width: box.width }}
+          aria-hidden="true"
+        />
+      ) : null}
+    </>
   );
 }

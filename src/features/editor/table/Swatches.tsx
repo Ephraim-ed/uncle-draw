@@ -24,7 +24,8 @@ export function Swatches({
   const picked = (color: string) =>
     color === value ||
     (color === PAPER && value.toLowerCase() === paper.toLowerCase() && !colors.includes(value));
-  const custom = !colors.some(picked);
+  // An empty value means nothing is picked (like a highlight that's applied, not shown).
+  const custom = value !== "" && !colors.some(picked);
   return (
     <fieldset className="ud-swatches" disabled={disabled}>
       <legend className="ud-swatches__label">{label}</legend>

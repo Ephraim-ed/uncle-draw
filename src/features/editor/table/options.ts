@@ -11,6 +11,8 @@ export interface LookChoice {
   border: string;
   borderWidth: number;
   align: Align;
+  /** Fade the text of ticked rows. */
+  dimDone: boolean;
 }
 
 export interface TableSetup extends TableOptions {
@@ -30,6 +32,7 @@ export const DEFAULT_SETUP: TableSetup = {
     border: "#1e1e1e",
     borderWidth: 1,
     align: "center",
+    dimDone: true,
   },
 };
 
@@ -88,6 +91,7 @@ export function loadSetup(): TableSetup {
           look.align === "left" || look.align === "right" || look.align === "center"
             ? look.align
             : d.look.align,
+        dimDone: typeof look.dimDone === "boolean" ? look.dimDone : d.look.dimDone,
       },
     };
   } catch {

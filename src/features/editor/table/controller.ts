@@ -6,16 +6,21 @@ import {
 } from "@excalidraw/excalidraw";
 import type { ExcalidrawElement, ExcalidrawTextElement } from "@excalidraw/excalidraw/element/types";
 import type { AppState, ExcalidrawImperativeAPI, ExcalidrawProps } from "@excalidraw/excalidraw/types";
+import { openLabelEditor } from "../labelEditor";
+import { toMarkdown, toSpreadsheet, type Area } from "./copy";
 import {
   bodyRows,
   buildTable,
+  clearCells,
   commit,
-  deleteCol,
-  deleteRow,
+  deleteCols,
+  deleteRows,
   edgeAt,
   fill,
+  highlight,
   insertCol,
   insertRow,
+  isDone,
   MIN_CHECK_COL_WIDTH,
   MIN_COL_WIDTH,
   MIN_ROW_HEIGHT,
@@ -28,6 +33,8 @@ import {
   setLook,
   slotAt,
   slotRect,
+  sortRows,
+  moveRow,
   tableSize,
   textCols,
   tidy,
@@ -88,13 +95,37 @@ export interface TableFocus {
   header: boolean;
   checkCol: boolean;
   look: TableLook;
-  /** The cell row/column actions apply to: the selected cell, or the last one clicked. */
-  active: { row: number; col: number } | null;
+  /** The cell actions start from: the last one clicked (or the selected cell). */
+  active: Cell | null;
   activeSize: { width: number; height: number } | null;
+  /** The picked cells: the active one, or several picked with Shift / Ctrl-click. */
+  cells: Cell[];
+  /** Whether several cells are picked (then Delete clears them and Ctrl+C copies them). */
+  multiple: boolean;
+  /** The rows and columns the picked cells span. */
+  area: Area | null;
   canDeleteRow: boolean;
   canDeleteCol: boolean;
+  /** Ticked rows out of all body rows, for checklists. */
+  progress: { done: number; total: number } | null;
   box: Box;
   activeBox: Box | null;
+  /** One box per picked cell when several are picked. */
+  pickedBoxes: Box[];
+  /** Each row's box, for the row grip and its drop line. */
+  rowBoxes: Box[];
+}
+
+export interface Cell {
+  row: number;
+  col: number;
+}
+
+/** Cells picked in one table, by element id so they survive edits. */
+interface CellPick {
+  groupId: string;
+  anchor: string;
+  ids: string[];
 }
 
 /** The table tool's preview while dragging. */
@@ -154,6 +185,25 @@ const selecting = (s: AppState) => !busy(s) && s.activeTool.type === "selection"
 const plain = (e: MouseEvent | TouchEvent | KeyboardEvent) =>
   !e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey;
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+/** How long keys typed after Tab / Enter wait for the next cell's editor. */
+const TYPE_AHEAD_MS = 1000;
+/** A key typed ahead: text, a move to another cell, or closing the editor. */
+type TypedKey = string | { move: "next" | "prev" | "down" } | { close: true };
+
+/** Types into Excalidraw's text editor the way a keystroke would. */
+function typeInto(area: HTMLTextAreaElement, text: string) {
+  if (!text) return;
+  area.setRangeText(text, area.selectionStart, area.selectionEnd, "end");
+  area.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+/** Whether keys go to a text field (where Delete and B mean typing). */
+const typingIn = (t: EventTarget | null) =>
+  t instanceof HTMLElement &&
+  (t.isContentEditable ||
+    t instanceof HTMLTextAreaElement ||
+    t instanceof HTMLSelectElement ||
+    (t instanceof HTMLInputElement && !["radio", "checkbox", "button"].includes(t.type)));
 const count = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
 
 /**
@@ -163,6 +213,9 @@ const count = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
  * - dragging a grid line resizes that column or row (a guide follows; one undo step);
  * - double-clicking a cell types in it (one step, not Excalidraw's two);
  * - the "table" custom tool (toolbar or B) drags out a new table;
+ * - Shift / Ctrl / Cmd-click picks cells; row, column, color, copy, clear
+ *   and paste actions then cover the picked cells;
+ * - Tab, Shift+Tab and Enter move between cells while typing;
  * - pasting lines or tab-separated values fills cells, one per line;
  * - the table bar's actions (rows, columns, header, checkboxes, styling).
  */
@@ -180,8 +233,16 @@ export class TableController {
   private listeners = new Set<() => void>();
   private frame = 0;
   private gesture: Gesture | null = null;
-  /** Where the last click inside a table landed, for the bar's row/column actions. */
-  private lastPress: { groupId: string; at: Point } | null = null;
+  /** The cells picked by clicking (Shift extends, Ctrl / Cmd toggles). */
+  private pick: CellPick | null = null;
+  /**
+   * Keys typed while Tab / Enter opens the next cell's editor (a frame or
+   * two). They'd otherwise reach the canvas as shortcuts; they go into the
+   * next cell instead.
+   */
+  private typeAhead: { until: number; queue: TypedKey[] } | null = null;
+  /** Where to go after the cell being typed in closes (Tab, Shift+Tab, Enter). */
+  private pendingMove: { groupId: string; cellId: string; move: "next" | "prev" | "down" } | null = null;
   private index: {
     source: readonly El[];
     byId: Map<string, El>;
@@ -223,22 +284,81 @@ export class TableController {
     });
   };
 
+  /** Row and column actions cover the picked cells: insert next to them, delete all their rows / columns. */
   insertRow = (where: "above" | "below") =>
-    this.withFocus((p, a) =>
-      insertRow(p, a ? a.row + (where === "below" ? 1 : 0) : where === "below" ? p.rowH.length : 0),
+    this.withFocus((p, f) =>
+      insertRow(
+        p,
+        f.area
+          ? where === "below"
+            ? f.area.rows[1] + 1
+            : f.area.rows[0]
+          : where === "below"
+            ? p.rowH.length
+            : 0,
+      ),
     );
-  deleteRow = () => this.withFocus((p, a) => (a ? deleteRow(p, a.row) : false));
+  deleteRow = () =>
+    this.withFocus((p, f) =>
+      deleteRows(
+        p,
+        f.cells.map((c) => c.row),
+      ),
+    );
   insertCol = (where: "left" | "right") =>
-    this.withFocus((p, a) =>
-      insertCol(p, a ? a.col + (where === "right" ? 1 : 0) : where === "right" ? p.colW.length : 0),
+    this.withFocus((p, f) =>
+      insertCol(
+        p,
+        f.area
+          ? where === "right"
+            ? f.area.cols[1] + 1
+            : f.area.cols[0]
+          : where === "right"
+            ? p.colW.length
+            : 0,
+      ),
     );
-  deleteCol = () => this.withFocus((p, a) => (a ? deleteCol(p, a.col) : false));
+  deleteCol = () =>
+    this.withFocus((p, f) =>
+      deleteCols(
+        p,
+        f.cells.map((c) => c.col),
+      ),
+    );
+  /** Colors the picked cells, or takes their own color away (null). */
+  highlight = (fill: string | null) =>
+    this.withFocus((p, f) => (f.cells.length ? highlight(p, f.cells, fill) : false));
+  /** Sorts the body rows by the active cell's column. */
+  sort = (dir: "asc" | "desc") =>
+    this.withFocus((p, f) => (f.active ? sortRows(p, f.active.col, dir) : false));
+  /** Moves a body row to land before row `to`; the moved row stays picked. */
+  moveRow = (from: number, to: number) =>
+    this.withFocus((p) => {
+      const id = p.slots[from]?.[0]?.cell?.id;
+      if (!moveRow(p, from, to)) return false;
+      if (id) this.pick = { groupId: p.groupId, anchor: id, ids: [id] };
+    });
+  /** Empties the picked cells. */
+  clearCells = () => this.withFocus((p, f) => (f.cells.length ? clearCells(p, f.cells) : false));
+
+  /** The picked cells (or the whole table) as text for another app. */
+  copyText = (kind: "spreadsheet" | "markdown"): { text: string; rows: number } | null => {
+    const api = this.api;
+    const focus = this.currentFocus();
+    if (!api || !focus) return null;
+    const p = readPlan(api.getSceneElements(), focus.groupId, this.font());
+    if (!p) return null;
+    const area = focus.multiple && focus.area ? focus.area : undefined;
+    const text = kind === "spreadsheet" ? toSpreadsheet(p, area) : toMarkdown(p, area);
+    return { text, rows: area ? area.rows[1] - area.rows[0] + 1 : p.rowH.length };
+  };
   setHeader = (on: boolean) => this.withFocus((p) => setHeader(p, on));
   setCheckCol = (on: boolean) => this.withFocus((p) => setCheckCol(p, on));
   setLook = (look: Partial<TableLook>) => this.withFocus((p) => setLook(p, look));
   /** Sets the active column's width or row's height, in scene px. */
   setSize = (kind: "width" | "height", size: number) =>
-    this.withFocus((p, a) => {
+    this.withFocus((p, f) => {
+      const a = f.active;
       if (!a || !Number.isFinite(size)) return false;
       if (kind === "width") resizeCol(p, a.col, size);
       else resizeRow(p, a.row, size);
@@ -276,7 +396,9 @@ export class TableController {
     const cells = text ? parseCells(text) : null;
     if (!focus || !cells) return true;
     this.edit(focus.groupId, (p) => {
-      const at = focus.active ?? { row: p.header ? 1 : 0, col: p.checkCol ? 1 : 0 };
+      const at = focus.area
+        ? { row: focus.area.rows[0], col: focus.area.cols[0] }
+        : { row: p.header ? 1 : 0, col: p.checkCol ? 1 : 0 };
       fill(p, at.row, at.col, cells.rows, cells.ticks);
     });
     return false;
@@ -357,9 +479,16 @@ export class TableController {
         return;
       }
       if (!selecting(s)) return;
-      const at = toScene(e.clientX, e.clientY);
-      const groupId = cellAt(api.getSceneElements(), at)?.groupIds[0];
-      this.lastPress = groupId ? { groupId, at } : null;
+      const cell = cellAt(api.getSceneElements(), toScene(e.clientX, e.clientY));
+      const groupId = cell?.groupIds[0];
+      // Shift / Ctrl / Cmd-click in the selected table picks cells instead of shapes.
+      const picking = (e.shiftKey || e.ctrlKey || e.metaKey) && !e.altKey;
+      if (cell && groupId && picking && this.currentFocus()?.groupId === groupId) {
+        stop(e);
+        this.pickCell(groupId, cell.id, e.shiftKey ? "range" : "toggle");
+        return;
+      }
+      this.pick = cell && groupId ? { groupId, anchor: cell.id, ids: [cell.id] } : null;
       if (!plain(e)) return;
       const hit = edgeUnder(e.clientX, e.clientY, e.pointerType === "touch");
       if (hit) {
@@ -429,10 +558,12 @@ export class TableController {
         e.stopPropagation();
         if (Math.hypot(e.clientX - g.x, e.clientY - g.y) > TAP_SLOP_PX) return;
         if (boxAt(e.clientX, e.clientY)?.id !== g.boxId) return;
-        api.updateScene({
-          elements: toggleCheckbox(api.getSceneElementsIncludingDeleted(), g.boxId),
-          captureUpdate: CaptureUpdateAction.IMMEDIATELY,
-        });
+        const toggled = toggleCheckbox(api.getSceneElementsIncludingDeleted(), g.boxId);
+        // Tables that dim ticked rows fade (or bring back) the row's text in the same step.
+        const groupId = this.scene().byId.get(g.boxId)?.groupIds[0];
+        const plan = groupId ? readPlan(toggled, groupId, this.font()) : null;
+        const next = plan?.look.dimDone ? (commit(toggled, plan, excalidrawText) ?? toggled) : toggled;
+        api.updateScene({ elements: next, captureUpdate: CaptureUpdateAction.IMMEDIATELY });
         return;
       }
       e.stopPropagation();
@@ -523,18 +654,88 @@ export class TableController {
         this.cancelGesture();
         return;
       }
+      // Typing in a cell: Tab / Shift+Tab / Enter move on, like a spreadsheet (Shift+Enter is a new line).
+      const area = e.target;
+      if (area instanceof HTMLTextAreaElement && host.contains(area) && !e.isComposing) {
+        const move =
+          e.key === "Tab" && !e.altKey && !e.ctrlKey && !e.metaKey
+            ? e.shiftKey
+              ? "prev"
+              : "next"
+            : e.key === "Enter" && plain(e)
+              ? "down"
+              : null;
+        const editing = api.getAppState().editingTextElement;
+        const containerId = editing?.type === "text" ? editing.containerId : null;
+        const cell = containerId ? this.scene().byId.get(containerId) : undefined;
+        const groupId = cell?.groupIds[0];
+        if (move && cell && groupId && tablePart(cell) === "cell") {
+          stop(e);
+          this.pendingMove = { groupId, cellId: cell.id, move };
+          this.typeAhead = { until: Date.now() + TYPE_AHEAD_MS, queue: [] };
+          area.blur(); // Excalidraw keeps the text; the move happens once the editor has closed
+        }
+        return;
+      }
+
       if ((e.key !== "b" && e.key !== "B") || !plain(e) || e.repeat) return;
-      const t = e.target;
-      const typing =
-        t instanceof HTMLElement &&
-        (t.isContentEditable ||
-          t instanceof HTMLTextAreaElement ||
-          t instanceof HTMLSelectElement ||
-          (t instanceof HTMLInputElement && !["radio", "checkbox", "button"].includes(t.type)));
       const s = api.getAppState();
-      if (typing || s.viewModeEnabled || s.editingTextElement) return;
+      if (typingIn(e.target) || s.viewModeEnabled || s.editingTextElement) return;
       e.preventDefault();
       this.activateTool();
+    };
+
+    // While the next cell's editor opens, hold on to what's typed.
+    const onTypeAhead = (e: KeyboardEvent) => {
+      let ahead = this.typeAhead;
+      if (!ahead) return;
+      if (Date.now() > ahead.until) {
+        this.typeAhead = null;
+        return;
+      }
+      const t = e.target;
+      if (t instanceof HTMLTextAreaElement && host.contains(t)) {
+        // The editor is open: what came first goes in first, then this key as usual,
+        // unless the replay moved on to another cell (then this key waits for that one).
+        this.replayTyping(t);
+        ahead = this.typeAhead;
+        if (!ahead) return;
+      }
+      stop(e);
+      const last = ahead.queue[ahead.queue.length - 1];
+      if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        if (typeof last === "string") ahead.queue[ahead.queue.length - 1] = last + e.key;
+        else ahead.queue.push(e.key);
+      } else if (e.key === "Backspace" && typeof last === "string") {
+        ahead.queue[ahead.queue.length - 1] = last.slice(0, -1);
+      } else if (e.key === "Tab" && !e.altKey && !e.ctrlKey && !e.metaKey) {
+        ahead.queue.push({ move: e.shiftKey ? "prev" : "next" });
+      } else if (e.key === "Enter" && plain(e)) {
+        ahead.queue.push({ move: "down" });
+      } else if (e.key === "Escape") {
+        ahead.queue.push({ close: true });
+      }
+    };
+
+    // Keys for picked cells come from anywhere in the editor, or from the page
+    // itself when the table bar's menus left focus there.
+    const forPicked = (t: EventTarget | null) =>
+      !typingIn(t) && (t === document.body || (t instanceof Node && host.contains(t)));
+    // Several picked cells: Delete / Backspace empties them instead of deleting the table.
+    const onPickedKey = (e: KeyboardEvent) => {
+      if ((e.key !== "Delete" && e.key !== "Backspace") || !plain(e) || !forPicked(e.target)) return;
+      if (this.currentFocus()?.multiple) {
+        stop(e);
+        this.clearCells();
+      }
+    };
+    // Ctrl / Cmd+C with several picked cells copies them as spreadsheet text, not as shapes.
+    const onCopy = (e: ClipboardEvent) => {
+      if (!forPicked(e.target) || !e.clipboardData || !this.currentFocus()?.multiple) return;
+      const copied = this.copyText("spreadsheet");
+      if (!copied) return;
+      e.clipboardData.setData("text/plain", copied.text);
+      stop(e);
     };
 
     // When a cell's text editor opens or closes.
@@ -549,6 +750,7 @@ export class TableController {
       clearTimeout(typingTimer);
       typingTimer = setTimeout(() => {
         if (ended) this.afterTyping(ended);
+        if (ended && !now) this.continueTyping();
         if (now) this.beforeTyping(now);
       }, 0);
     });
@@ -562,6 +764,9 @@ export class TableController {
     host.addEventListener("touchstart", onTouchStart, activeCapture);
     host.addEventListener("paste", onPasteInCell, capture);
     host.addEventListener("keydown", onKeyDown, capture);
+    window.addEventListener("copy", onCopy, capture);
+    window.addEventListener("keydown", onPickedKey, capture);
+    window.addEventListener("keydown", onTypeAhead, capture);
     window.addEventListener("pointerup", onPointerUp, capture);
     window.addEventListener("pointercancel", onPointerCancel, capture);
     window.addEventListener("pointermove", onPointerMove);
@@ -581,6 +786,9 @@ export class TableController {
       host.removeEventListener("touchstart", onTouchStart, activeCapture);
       host.removeEventListener("paste", onPasteInCell, capture);
       host.removeEventListener("keydown", onKeyDown, capture);
+      window.removeEventListener("copy", onCopy, capture);
+      window.removeEventListener("keydown", onPickedKey, capture);
+      window.removeEventListener("keydown", onTypeAhead, capture);
       window.removeEventListener("pointerup", onPointerUp, capture);
       window.removeEventListener("pointercancel", onPointerCancel, capture);
       window.removeEventListener("pointermove", onPointerMove);
@@ -610,8 +818,10 @@ export class TableController {
     const api = this.api;
     if (!api) return;
     const s = api.getAppState();
+    const focus = this.readFocus(s);
+    if (!focus && !s.editingTextElement) this.pick = null;
     this.set({
-      focus: this.readFocus(s),
+      focus,
       toolActive: toolOn(s),
       editable: !s.viewModeEnabled && !s.zenModeEnabled,
       paper: paperColor(s),
@@ -693,9 +903,9 @@ export class TableController {
     return this.api ? this.readFocus(this.api.getAppState()) : null;
   }
 
-  private withFocus(change: (p: Plan, active: TableFocus["active"]) => boolean | void) {
+  private withFocus(change: (p: Plan, focus: TableFocus) => boolean | void) {
     const focus = this.currentFocus();
-    if (focus) this.edit(focus.groupId, (p) => change(p, focus.active));
+    if (focus) this.edit(focus.groupId, (p) => change(p, focus));
   }
 
   /** The new size for a resize gesture's pointer position (scene px). */
@@ -786,6 +996,117 @@ export class TableController {
     this.insert(setup, at, this.api!.getAppState().activeTool.locked);
   }
 
+  /** Shift-click picks the cells between the anchor and this one; Ctrl / Cmd-click adds or removes one. */
+  private pickCell(groupId: string, cellId: string, mode: "range" | "toggle") {
+    const p = readPlan(this.scene().source, groupId, this.font());
+    if (!p) return;
+    const ids = p.slots.map((row) => row.map((s) => s.cell?.id ?? ""));
+    const where = (id: string) => {
+      for (let r = 0; r < ids.length; r++) {
+        const c = ids[r]!.indexOf(id);
+        if (c >= 0) return { row: r, col: c };
+      }
+      return null;
+    };
+    const prev = this.pick?.groupId === groupId ? this.pick : null;
+    const anchor = prev && where(prev.anchor) ? prev.anchor : cellId;
+    if (mode === "range") {
+      const a = where(anchor)!;
+      const b = where(cellId)!;
+      const picked: string[] = [];
+      for (let r = Math.min(a.row, b.row); r <= Math.max(a.row, b.row); r++) {
+        for (let c = Math.min(a.col, b.col); c <= Math.max(a.col, b.col); c++) picked.push(ids[r]![c]!);
+      }
+      this.pick = { groupId, anchor, ids: picked };
+    } else {
+      const current = prev?.ids ?? [];
+      const next = current.includes(cellId) ? current.filter((id) => id !== cellId) : [...current, cellId];
+      this.pick = next.length
+        ? { groupId, anchor: cellId, ids: next }
+        : { groupId, anchor: cellId, ids: [cellId] };
+    }
+    this.schedule();
+  }
+
+  /** After Tab / Shift+Tab / Enter: open the next cell, adding a row at the end of the table. */
+  private continueTyping() {
+    const move = this.pendingMove;
+    this.pendingMove = null;
+    const api = this.api;
+    const host = this.host;
+    if (!move || !api || !host) return;
+    const read = () => readPlan(api.getSceneElementsIncludingDeleted(), move.groupId, this.font());
+    let p = read();
+    let at: Cell | null = null;
+    p?.slots.forEach((row, r) =>
+      row.forEach((s, c) => {
+        if (s.cell?.id === move.cellId) at = { row: r, col: c };
+      }),
+    );
+    if (!p || !at) return;
+    const { row, col } = at as Cell;
+    const first = p.checkCol ? 1 : 0;
+    const last = p.colW.length - 1;
+    let target: Cell | null = null;
+    let addRow = false;
+    if (move.move === "next") {
+      if (col < last) target = { row, col: col + 1 };
+      else if (row < p.rowH.length - 1) target = { row: row + 1, col: first };
+      else [target, addRow] = [{ row: row + 1, col: first }, true];
+    } else if (move.move === "prev") {
+      if (col > first) target = { row, col: col - 1 };
+      else if (row > 0) target = { row: row - 1, col: last };
+    } else if (row < p.rowH.length - 1) {
+      target = { row: row + 1, col };
+    } else {
+      [target, addRow] = [{ row: row + 1, col }, true];
+    }
+    if (!target) return;
+    if (addRow) {
+      this.edit(move.groupId, (q) => insertRow(q, q.rowH.length), CaptureUpdateAction.IMMEDIATELY, false);
+      p = read();
+    }
+    const id = p?.slots[target.row]?.[target.col]?.cell?.id;
+    if (!id) return;
+    this.pick = { groupId: move.groupId, anchor: id, ids: [id] };
+    openLabelEditor(api, host, id, move.groupId);
+  }
+
+  /**
+   * Plays keys typed ahead into the editor that just opened: text goes in,
+   * and a Tab / Enter / Escape among them moves on (or closes) like the real
+   * key would, keeping the rest for the next cell. True when something played.
+   */
+  private replayTyping(area: HTMLTextAreaElement): boolean {
+    const ahead = this.typeAhead;
+    if (!ahead || ahead.queue.length === 0) {
+      this.typeAhead = null;
+      return false;
+    }
+    while (ahead.queue.length > 0) {
+      const key = ahead.queue.shift()!;
+      if (typeof key === "string") {
+        typeInto(area, key);
+        continue;
+      }
+      if ("close" in key) {
+        this.typeAhead = null;
+        area.blur();
+        return true;
+      }
+      const editing = this.api?.getAppState().editingTextElement;
+      const cellId = editing?.type === "text" ? editing.containerId : null;
+      const groupId = cellId ? this.scene().byId.get(cellId)?.groupIds[0] : undefined;
+      if (!cellId || !groupId) break;
+      this.pendingMove = { groupId, cellId, move: key.move };
+      this.typeAhead = { until: Date.now() + TYPE_AHEAD_MS, queue: ahead.queue };
+      area.blur();
+      return true;
+    }
+    this.typeAhead = null;
+    return true;
+  }
+
   private afterTyping(textId: string) {
     const api = this.api;
     if (!api) return;
@@ -801,6 +1122,8 @@ export class TableController {
 
   /** New text in a cell starts centered (Excalidraw's rule); show the table's alignment while typing. */
   private beforeTyping(textId: string) {
+    const area = document.activeElement;
+    if (area instanceof HTMLTextAreaElement && this.host?.contains(area)) this.replayTyping(area);
     const api = this.api;
     const editing = api?.getAppState().editingTextElement;
     if (!api || editing?.id !== textId || editing.type !== "text" || !editing.containerId) return;
@@ -850,13 +1173,41 @@ export class TableController {
     const p = readPlan(source, groupId, this.font(s));
     if (!p) return null;
 
-    let active: TableFocus["active"] = null;
-    if (selected.length === 1) {
+    // Where each cell sits, by element id.
+    const where = new Map<string, Cell>();
+    p.slots.forEach((row, r) =>
+      row.forEach((slot, c) => {
+        if (slot.cell) where.set(slot.cell.id, { row: r, col: c });
+      }),
+    );
+    const pick = this.pick?.groupId === groupId ? this.pick : null;
+    let active: Cell | null = pick ? (where.get(pick.anchor) ?? null) : null;
+    if (!active && selected.length === 1) {
       let el: El | undefined = selected[0];
       if (el?.type === "text" && el.containerId) el = byId.get(el.containerId);
       if (el && tablePart(el)) active = slotAt(p, centerOf(el));
     }
-    if (!active && this.lastPress?.groupId === groupId) active = slotAt(p, this.lastPress.at);
+    const picked = pick ? pick.ids.flatMap((id) => where.get(id) ?? []) : [];
+    const cells = picked.length > 0 ? picked : active ? [active] : [];
+    const multiple = cells.length > 1;
+    const rowsOf = new Set(cells.map((c) => c.row));
+    const colsOf = new Set(cells.map((c) => c.col));
+    const area: Area | null = cells.length
+      ? {
+          rows: [Math.min(...rowsOf), Math.max(...rowsOf)],
+          cols: [Math.min(...colsOf), Math.max(...colsOf)],
+        }
+      : null;
+    const first = p.header ? 1 : 0;
+    const total = p.rowH.length - first;
+    const done = p.checkCol ? p.slots.slice(first).filter((_, i) => isDone(p, first + i)).length : 0;
+    const rect = planRect(p);
+    let top = rect.y;
+    const rowBoxes = p.rowH.map((h) => {
+      const box = this.toBox(s, { x: rect.x, y: top, width: rect.width, height: h });
+      top += h;
+      return box;
+    });
     return {
       groupId,
       rows: p.rowH.length,
@@ -866,10 +1217,16 @@ export class TableController {
       look: p.look,
       active,
       activeSize: active ? { width: p.colW[active.col]!, height: p.rowH[active.row]! } : null,
-      canDeleteRow: !!active && ((p.header && active.row === 0) || bodyRows(p) > 1),
-      canDeleteCol: !!active && ((p.checkCol && active.col === 0) || textCols(p) > 1),
-      box: this.toBox(s, planRect(p)),
+      cells,
+      multiple,
+      area,
+      canDeleteRow: cells.length > 0 && ([...rowsOf].some((r) => p.header && r === 0) || bodyRows(p) > 1),
+      canDeleteCol: cells.length > 0 && ([...colsOf].some((c) => p.checkCol && c === 0) || textCols(p) > 1),
+      progress: p.checkCol && total > 0 ? { done, total } : null,
+      box: this.toBox(s, rect),
       activeBox: active ? this.toBox(s, slotRect(p, active.row, active.col)) : null,
+      pickedBoxes: multiple ? cells.map((c) => this.toBox(s, slotRect(p, c.row, c.col))) : [],
+      rowBoxes,
     };
   }
 }

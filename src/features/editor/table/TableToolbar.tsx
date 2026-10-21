@@ -32,8 +32,8 @@ export function TableToolbarButtons({
       <button
         type="button"
         className="ToolIcon ToolIcon_type_button ToolIcon_size_medium ToolIcon_type_button--show ud-toolbar-templates"
-        title="Flowchart templates"
-        aria-label="Flowchart templates"
+        title="Templates"
+        aria-label="Templates"
         data-testid="toolbar-templates"
         onClick={onTemplates}
       >

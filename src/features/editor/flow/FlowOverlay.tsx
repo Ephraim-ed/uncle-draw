@@ -44,6 +44,20 @@ export function FlowOverlay({ controller }: { controller: FlowController }) {
   return (
     <>
       {ui.node ? <StepHandles box={ui.node.box} onAdd={controller.addStep} /> : null}
+      {ui.arrow ? (
+        <button
+          type="button"
+          className="ud-flow-add ud-sketch"
+          style={{ left: ui.arrow.left, top: ui.arrow.top }}
+          aria-label="Insert a step here"
+          title="Insert a step here"
+          onMouseDown={keepFocus}
+          onClick={controller.insertStep}
+        >
+          <SketchArt seed={hashSeed("flow-add:insert")} shape="circle" fillStyle="solid" strokeWidth={1.5} />
+          <IconPlus size={14} stroke={2.5} />
+        </button>
+      ) : null}
       {ui.lane ? <LaneBar lane={ui.lane} controller={controller} /> : null}
     </>
   );

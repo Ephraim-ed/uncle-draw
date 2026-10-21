@@ -2,8 +2,18 @@ import { convertToExcalidrawElements } from "@excalidraw/excalidraw";
 import type { ExcalidrawArrowElement, ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
 import { describe, expect, it } from "vitest";
 import { buildTable, DEFAULT_HEADER_FILL } from "../table/grid";
-import { FLOWCHARTS, buildTemplate } from "../templates/flowcharts";
-import { STEP_FILL, addLane, addNextStep, deleteLane, flowKind, isFlowNode, laneStack } from "./flow";
+import { TEMPLATES, buildTemplate } from "../templates/templates";
+import {
+  STEP_FILL,
+  addLane,
+  addNextStep,
+  deleteLane,
+  flowKind,
+  insertStep,
+  isFlowNode,
+  isSplittable,
+  laneStack,
+} from "./flow";
 
 type El = ExcalidrawElement;
 
@@ -13,10 +23,11 @@ const STYLE = {
   roughness: 1,
   fillStyle: "hachure",
   fontFamily: 5,
+  paper: "#ffffff",
 } as const;
 const template = (id: string) =>
   buildTemplate(
-    FLOWCHARTS.find((t) => t.id === id)!,
+    TEMPLATES.find((t) => t.id === id)!,
     { x: 0, y: 0 },
     STYLE,
   );
@@ -207,6 +218,7 @@ describe("isFlowNode", () => {
       borderWidth: 1,
       align: "center" as const,
       roughness: 1,
+      dimDone: false,
     };
     const [cell] = buildTable({ rows: 1, cols: 1, header: false, checkboxes: false }, { x: 0, y: 0 }, look, {
       fontSize: 20,
@@ -214,5 +226,67 @@ describe("isFlowNode", () => {
       strokeColor: "#000",
     });
     expect(isFlowNode({ ...cell!, boundElements: [{ type: "arrow", id: "a" }] })).toBe(false);
+  });
+});
+
+describe("insertStep", () => {
+  it("splits an arrow in a vertical flow, pushing the steps after it down", () => {
+    const els = template("process");
+    const a = labelled(els, "Do the work");
+    const b = labelled(els, "Check the result");
+    const done = labelled(els, "Done");
+    const arrow = arrowBetween(els, a, b);
+    expect(isSplittable(arrow, els)).toBe(true);
+    const { elements, stepId } = insertStep(els, arrow.id)!;
+    const step = byId(elements, stepId);
+    expect([step.x, step.y]).toEqual([a.x, a.y + a.height + 64]);
+    // The old arrow now ends at the new step; a new one goes on.
+    expect((byId(elements, arrow.id) as ExcalidrawArrowElement).endBinding?.elementId).toBe(step.id);
+    expect(arrowBetween(elements, step, b)).toBeDefined();
+    // Everything after moved down by one step and a gap; the elbows stayed attached.
+    expect(byId(elements, b.id).y).toBe(b.y + 72 + 64);
+    expect(byId(elements, done.id).y).toBe(done.y + 72 + 64);
+    expect(byId(elements, b.id).boundElements?.some((r) => r.id === arrow.id)).toBe(false);
+  });
+
+  it("keeps a labelled arrow's label on the first half", () => {
+    const els = template("decision");
+    const ok = labelled(els, "Is it OK?");
+    const next = labelled(els, "Carry on");
+    const yes = arrowBetween(els, ok, next);
+    const { elements, stepId } = insertStep(els, yes.id)!;
+    const label = live(elements).find((el) => el.type === "text" && el.originalText === "Yes")!;
+    expect((label as { containerId: string }).containerId).toBe(yes.id);
+    expect((byId(elements, yes.id) as ExcalidrawArrowElement).endBinding?.elementId).toBe(stepId);
+  });
+
+  it("doesn't split arrows that aren't between two steps", () => {
+    const [free] = convertToExcalidrawElements([{ type: "arrow", x: 0, y: 0, width: 100, height: 0 }]);
+    expect(isSplittable(free!, [free!])).toBe(false);
+  });
+});
+
+describe("growing other charts", () => {
+  it("adds a mind-map branch that looks like the others, joined by a plain line", () => {
+    const els = template("mindmap");
+    const idea = labelled(els, "Big idea");
+    const { elements, stepId } = addNextStep(els, idea.id, "down")!;
+    const branch = byId(elements, stepId);
+    expect([flowKind(branch), branch.width, branch.height]).toEqual(["branch", 170, 60]);
+    const line = arrowBetween(elements, idea, branch);
+    expect(line.endArrowhead).toBeNull();
+  });
+
+  it("adds a report under a person in an org chart", () => {
+    const els = template("orgchart");
+    const design = labelled(els, "Design");
+    const { elements, stepId } = addNextStep(els, design.id, "down")!;
+    expect(flowKind(byId(elements, stepId))).toBe("person");
+  });
+
+  it("never grows from sticky notes or columns", () => {
+    const els = template("kanban");
+    expect(isFlowNode(labelled(els, "Write the brief"))).toBe(false);
+    expect(isFlowNode(labelled(els, "To do"))).toBe(false);
   });
 });

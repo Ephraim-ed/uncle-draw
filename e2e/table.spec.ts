@@ -1,6 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
 import { adminGetBoard, createBoard, signIn, uniqueEmail } from "./helpers";
 
+test.use({ permissions: ["clipboard-read", "clipboard-write"] });
+
 interface El {
   id: string;
   type: string;
@@ -8,6 +10,7 @@ interface El {
   customData?: { udTable?: string; udAlign?: string };
   containerId?: string | null;
   backgroundColor?: string;
+  opacity?: number;
   width: number;
   /** What was typed; `text` has Excalidraw's wrapping line breaks. */
   originalText?: string;
@@ -225,4 +228,131 @@ test("draw a table with the toolbar tool, resize it, edit it from the table bar 
   await expect.poll(async () => (await cells()).length).toBe(24);
   const all = texts(await scene(boardId)).map((t) => t.originalText);
   expect(all).toEqual(expect.arrayContaining(["Apples", "Pears", "Plums"]));
+});
+
+/** Cell text by [row, column], from where the cells sit (the header is row 0). */
+function grid(els: El[]): Map<string, El> {
+  const cells = live(els, "cell");
+  const xs = [...new Set(cells.map((c) => c.x))].sort((a, b) => a - b);
+  const ys = [...new Set(cells.map((c) => c.y))].sort((a, b) => a - b);
+  const out = new Map<string, El>();
+  for (const t of texts(els)) {
+    const cell = cells.find((c) => c.id === t.containerId);
+    if (cell) out.set(`${ys.indexOf(cell.y)},${xs.indexOf(cell.x)}`, t);
+  }
+  return out;
+}
+const column = (els: El[], col: number) =>
+  [...grid(els).entries()]
+    .filter(([key]) => key.endsWith(`,${col}`))
+    .sort(([a], [b]) => Number(a.split(",")[0]) - Number(b.split(",")[0]))
+    .map(([, t]) => t.originalText);
+
+test("type across cells with Tab and Enter, copy, sort, reorder, dim done rows, and pick cells", async ({
+  page,
+}) => {
+  await signIn(page, uniqueEmail("table-more"));
+  const boardId = await createBoard(page);
+  await page.getByTestId("main-menu-trigger").click();
+  await page.getByRole("button", { name: "Insert table…" }).click();
+  await page
+    .getByRole("dialog", { name: "Insert a table" })
+    .getByRole("button", { name: "Insert table" })
+    .click();
+  const editor = page.locator(".excalidraw textarea");
+
+  // Tab moves right, Enter moves down, Shift+Tab moves back, even typed in one fast burst.
+  await page.mouse.click(EMPTY.x, EMPTY.y);
+  await page.mouse.dblclick(COL(1), ROW(1));
+  await expect(editor).toBeFocused();
+  await page.keyboard.type("Milk");
+  await page.keyboard.press("Tab");
+  await page.keyboard.type("2");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("12");
+  await page.keyboard.press("Shift+Tab");
+  await page.keyboard.type("Eggs");
+  await page.keyboard.press("Escape");
+  await expect(editor).toHaveCount(0);
+  await save(page);
+  await expect
+    .poll(async () =>
+      Object.fromEntries([...grid(await scene(boardId))].map(([k, t]) => [k, t.originalText])),
+    )
+    .toEqual({ "1,1": "Milk", "1,2": "2", "2,1": "Eggs", "2,2": "12" });
+
+  // Enter in the last row adds a row.
+  await page.mouse.click(EMPTY.x, EMPTY.y);
+  await page.mouse.dblclick(COL(1), ROW(3));
+  await expect(editor).toBeFocused();
+  await page.keyboard.type("Bread");
+  // Typing straight on, before the next cell's editor is open, still lands in the new cell.
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("Jam");
+  await expect(editor).toBeFocused();
+  await page.keyboard.press("Escape");
+  await save(page);
+  await expect.poll(async () => live(await scene(boardId), "cell").length).toBe(15);
+  expect(column(await scene(boardId), 1)).toEqual(["Milk", "Eggs", "Bread", "Jam"]);
+
+  // Copy for spreadsheets: TRUE / FALSE for the boxes.
+  const bar = page.getByRole("toolbar", { name: "Table" });
+  await page.mouse.click(EMPTY.x, EMPTY.y);
+  await page.mouse.click(COL(1), ROW(1));
+  await bar.getByRole("button", { name: "Copy table" }).click();
+  await page.getByRole("menuitem", { name: "Copy for spreadsheets" }).click();
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toContain("FALSE\tMilk\t2");
+
+  // Sort by the first column, Z → A.
+  await page.mouse.click(COL(1), ROW(1));
+  await bar.getByRole("button", { name: "Sort by this column" }).click();
+  await page.getByRole("menuitem", { name: "Sort Z → A" }).click();
+  await save(page);
+  await expect.poll(async () => column(await scene(boardId), 1)).toEqual(["Milk", "Jam", "Eggs", "Bread"]);
+
+  // Drag the last row's grip to the top.
+  await page.mouse.click(COL(1), ROW(4));
+  const grip = page.locator(".ud-row-grip");
+  const at = (await grip.boundingBox())!;
+  await drag(
+    page,
+    { x: at.x + at.width / 2, y: at.y + at.height / 2 },
+    { x: at.x + at.width / 2, y: ROW(1) - 18 },
+  );
+  await save(page);
+  await expect.poll(async () => column(await scene(boardId), 1)).toEqual(["Bread", "Milk", "Jam", "Eggs"]);
+
+  // Ticking a row dims its text, and the bar counts what's done.
+  await page.mouse.click(EMPTY.x, EMPTY.y);
+  await page.mouse.click(BOX_X, ROW(1));
+  await save(page);
+  await expect.poll(async () => grid(await scene(boardId)).get("1,1")?.opacity).toBe(35);
+  await page.mouse.click(COL(2), ROW(2));
+  await expect(bar.getByText("1 of 4 done")).toBeVisible();
+
+  // Shift-click picks a range: highlight it, then Delete empties it.
+  await page.mouse.click(COL(1), ROW(1));
+  await page.keyboard.down("Shift");
+  await page.mouse.click(COL(2), ROW(2));
+  await page.keyboard.up("Shift");
+  await expect(page.locator(".ud-table-picked")).toHaveCount(4);
+  await bar.getByRole("button", { name: "Table style" }).click();
+  await bar.getByRole("group", { name: "Highlight cells" }).getByTitle("Light red").click();
+  await save(page);
+  await expect
+    .poll(
+      async () => live(await scene(boardId), "cell").filter((c) => c.backgroundColor === "#ffc9c9").length,
+    )
+    .toBe(4);
+  await bar.getByRole("button", { name: "Table style" }).click(); // closes the style panel
+  // Ctrl / Cmd-click adds a single cell to the picked ones.
+  await page.keyboard.down("ControlOrMeta");
+  await page.mouse.click(COL(1), ROW(4));
+  await page.keyboard.up("ControlOrMeta");
+  await expect(page.locator(".ud-table-picked")).toHaveCount(5);
+  await page.keyboard.press("Delete");
+  await save(page);
+  // Rows 1–2 (both columns) and Eggs were picked; Jam is all that's left in the first column.
+  await expect.poll(async () => column(await scene(boardId), 1)).toEqual(["Jam"]);
+  expect(live(await scene(boardId), "cell")).toHaveLength(15); // the table itself is still there
 });

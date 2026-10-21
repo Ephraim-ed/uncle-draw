@@ -276,21 +276,25 @@ Search, sort and the Trash link arrive in v1.1 (DASH-6, DASH-8). In v1 the heade
   4. **Avatar** menu.
 - **Main menu (`<MainMenu>`)**:
   - Uncle Draw items first: "← Back to boards", "Rename…", "Share…", separator.
-  - Then "Insert table…" (EDIT-7), "Flowchart templates…" (EDIT-8) and the Excalidraw defaults we keep: Export image, Save to file (`.excalidraw`), Find on canvas, Help, Theme toggle, Canvas background, Reset canvas.
+  - Then "Insert table…" (EDIT-7), "Templates…" and "Save as template…" (EDIT-8), and the Excalidraw defaults we keep: Export image, Save to file (`.excalidraw`), Find on canvas, Help, Theme toggle, Canvas background, Reset canvas.
   - Remove "Open" (`loadScene`). Importing happens from the dashboard.
 - **Toolbar tools** (after Excalidraw's eraser, in its own tool-button markup):
   - **Table** (▦, shortcut **B**) is a tool: it highlights like the others, and a drag on the canvas shows a dashed primary-blue grid preview with a "3 rows × 2 columns" chip.
-  - **Flowchart templates** (⑂) opens the picker. It's hidden on phones, where the main menu has it.
+  - **Templates** (⑂) opens the picker. It's hidden on phones, where the main menu has it.
 - **Footer (`<Footer>`)**: only if the toolbar slot can't be found, secondary small **Table** and **Templates** buttons appear next to undo/redo.
 - **Table bar**: a sketch-framed bar (surface fill, paper-cut shadow) floats 12 px above a selected table, or below it when there's no room, clear of the toolbar and footer.
   - Ghost icon buttons (34 px, Tabler 18 px) in groups: rows, columns, header/checkbox toggles (pressed = primary), alignment, then style and delete.
   - The style panel opens under it, with color chips (Excalidraw's quick picks, a dashed "Canvas color" chip, a rainbow custom picker), border widths, and px fields for the active column and row.
   - The active cell gets a dashed primary outline. Clicking the bar never takes keyboard focus from the canvas.
+- **Table bar extras**: a "3 of 5 done" count at its start for checklists, a Sort menu and a Copy menu (sketch menus), and in the style panel a Highlight color row (with "None") and "Dim ticked rows".
+  - Cells picked with Shift/Ctrl-click are tinted primary (14%).
+  - The active row gets a 20 × 28 px grip just left of the table, and a 3 px primary line shows where a dragged row will land.
+- **Insert-a-step "+"**: the same blue dot, 30 px beside a selected arrow's middle (above it for mostly horizontal arrows), clear of Excalidraw's own point handles.
 - **Grid-line drags** show a 2 px primary guide with a "240 px" chip. The cursor is `col-resize` or `row-resize` over a line and `pointer` over a checkbox.
 - **Tables** keep the canvas style. Defaults: 1 px borders in black, body cells filled with the canvas color, a light gray (`#e9ecef`) header row, centered text, 22 px checkboxes with rounded corners, and a tick that overshoots the box like a quick pen mark.
 - **"+" step buttons**: 26 px rough primary-blue dots with a white plus. They sit 34 px outside a selected step's sides (50 px above it, clear of the rotate handle).
 - **Lane bar**: the same floating bar as the table bar, by the selected lane's header, with "Add lane above", "Add lane below" and "Delete lane". Floating bars keep right of Excalidraw's style panel (232 px) on desktop.
-- **Flowchart templates dialog** (760 px): a grid of sketch-framed cards. Each has a live preview drawn by Excalidraw on the light thumbnail well (light in both themes, like board thumbnails), a name and a one-line description.
+- **Templates dialog** (820 px): its list scrolls inside the dialog and has sections: Flowcharts, Planning, Diagrams, then My templates (a "Save selected shapes" button and a trash button on each card). Each section is a grid of sketch-framed cards. Each has a live preview drawn by Excalidraw on the light thumbnail well (light in both themes, like board thumbnails), a name and a one-line description.
 - **Welcome screen (`<WelcomeScreen>`)** on an empty board:
   - Center: the Uncle Draw wordmark (in place of Excalidraw's logo) and "Start sketching. Uncle Draw saves as you go."
   - Center menu: "Back to boards" and "Help".

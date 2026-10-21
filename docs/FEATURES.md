@@ -52,7 +52,7 @@ This doc lists what Uncle Draw does, for whom, and when. Each feature has an ID,
 | EDIT-5 | Remember my view and last-used style | v1 | P1 |
 | EDIT-6 | Mermaid → diagram | v1.1 | P2 |
 | EDIT-7 | Tables with checkboxes | v1.1 | P1 |
-| EDIT-8 | Flowchart templates | v1.1 | P1 |
+| EDIT-8 | Templates (flowcharts, planning, diagrams) and growing charts | v1.1 | P1 |
 | SAVE-1 | Autosave to the cloud | v1 | P0 |
 | SAVE-2 | Save-status indicator | v1 | P0 |
 | SAVE-3 | Offline backup and recovery | v1 | P0 |
@@ -209,35 +209,58 @@ Acceptance:
   - Selecting a table shows a **table bar** above it. It can insert a row above or below, insert a column left or right, delete a row or column, turn the header row or checkbox column on or off, align the text left, center or right, and delete the table.
   - Its **style panel** sets the header color, cell color, border color and border width. It also sets an exact width for the active cell's column and an exact height for its row.
   - Row and column actions apply to the clicked (or selected) cell, which is outlined.
+  - **Picking cells:** in a selected table, **Shift-click** picks every cell between the last one clicked and this one, and **Ctrl-click** (Cmd on a Mac) adds or removes one cell. Picked cells are tinted.
+    - Row and column actions then cover every picked row or column.
+    - The style panel's **Highlight** colors just the picked cells.
+    - **Delete** empties them (instead of deleting the table).
+    - **Ctrl/Cmd+C** copies them as spreadsheet text, and a paste fills from the first one.
+    - Alt-click still selects the shape under the pointer.
   - **Dragging a grid line** resizes that column or row. A guide shows the new size, and the table changes on release.
+  - **Sorting:** the bar sorts the body rows by the active cell's column, A → Z or Z → A. Numbers sort by value, text in natural order ("Item 2" before "Item 10"), and empty cells last. The checkbox column puts open items first.
+  - **Reordering:** a grip by the active row moves it. Drag it to where the row should go (a line shows where), or focus it and use the arrow keys.
 - **Filling it:**
   - Double-click a cell to type in it.
+    - **Tab** moves to the next cell, **Shift+Tab** to the previous one, and **Enter** to the cell below. **Shift+Enter** is a new line.
+    - Tab in the last cell, or Enter in the last row, adds a row.
+    - Keys typed while the next cell opens go into that cell.
   - **Pasting** several lines into a selected table, or while typing in a cell, puts one line per row and one tab-separated value per column, adding rows and columns as needed.
-  - List bullets are dropped, and `[x]` / `[ ]` checklist items tick the row's box.
+  - List bullets are dropped, and `[x]` / `[ ]` checklist items tick the row's box. A TRUE / FALSE first column (what a spreadsheet copies from a checklist) ticks the boxes too.
+- **Using it:**
+  - Checklists show their progress in the table bar ("3 of 5 done").
+  - Ticked rows' text fades, unless "Dim ticked rows" is turned off in the style panel.
+  - **Copy** in the bar copies the table (or the picked cells) for spreadsheets (tab-separated, TRUE / FALSE for boxes) or as a Markdown table.
 - A table is ordinary Excalidraw shapes in one group: cell rectangles with bound text, small checkbox squares, and pen-style ticks. It saves, syncs live, undoes, exports and shows in share views like any other drawing, and it keeps the board's sketchy style.
 
 Acceptance:
 - [ ] Clicking a checkbox ticks or unticks it without selecting or moving the table. Shift/Ctrl/Alt-click still selects the box itself. Each tick is one undo step.
 - [ ] Double-clicking a cell starts typing in it. Double-clicking a checkbox or a grid line never drops a stray text box.
 - [ ] When text wraps and makes a cell taller, the whole row grows and the rows below move down. Rows grow to fit their text but never shrink below it.
-- [ ] Every table bar action, a grid-line drag, and a paste are each one undo step.
+- [ ] Every table bar action, a grid-line drag, a paste, a sort and a row move are each one undo step.
+- [ ] Shift- and Ctrl/Cmd-click pick cells only in the selected table. Delete with several picked cells never deletes the table.
+- [ ] Tab, Shift+Tab and Enter while typing never leak keys to Excalidraw's shortcuts, however fast they're typed.
+- [ ] Copying out and pasting back in gives the same table, ticks included.
 - [ ] Adding or removing the header row or checkbox column leaves the rest of the table where it was.
 - [ ] Ticks survive a reload, reach collaborators live, and show (read-only) in share views.
 
-### EDIT-8 · Flowchart templates · v1.1 · P1
-*As a user, I want to start a flowchart from a ready-made shape instead of drawing every box and arrow, and keep growing it.*
-- The **Flowchart templates** button in the toolbar (after the Table tool), or Main menu → "Flowchart templates…", opens a picker with a live preview of each template:
-  - Simple process
-  - Left to right
-  - Yes or no
-  - Repeat until done
-  - Three-way choice
-  - Swimlanes
+### EDIT-8 · Templates and growing charts · v1.1 · P1
+*As a user, I want to start from a ready-made chart instead of drawing every box and arrow, keep growing it, and keep my own charts to reuse.*
+- The **Templates** button in the toolbar (after the Table tool), or Main menu → "Templates…", opens a picker with a live preview of each template:
+  - **Flowcharts:** Simple process, Left to right, Yes or no, Repeat until done, Three-way choice, Swimlanes.
+  - **Planning:** Kanban board, Retrospective, Timeline, User journey. The user journey is a real table (EDIT-7).
+  - **Diagrams:** Mind map, Org chart. Their lines have no arrowheads.
 - The pick drops into the middle of the view, selected, in the current stroke color, width, sloppiness, fill style and font. Ends are green, steps blue and questions yellow.
 - **Adding the next step:** a selected step shows four **"+"** buttons, one on each side. This works for template steps and for any box, diamond or ellipse that has arrows.
   - A click adds a new step on that side, joined by an arrow, and starts typing its name.
   - The new step looks like its neighbors.
   - If something is already there, the step goes past it.
+  - It works the same way for mind maps (a new branch, joined by a plain line) and org charts (a new person).
+- **Inserting a step between two:** a selected arrow between two steps shows a **"+"** beside its middle.
+  - A click puts a new step where the arrow leaves its start, and the arrow (with its label) now ends there. A new arrow goes on to the old target.
+  - If the next steps are in the way, they and everything after them move along to make room.
+- **My templates:** select shapes and choose Main menu → "Save as template…" (or "Save selected shapes" in the Templates dialog), then name it.
+  - Saved templates appear under "My templates", with a preview, and insert as fresh copies.
+  - They're kept in my library (LIB-1), so they're on every board and device.
+  - Removing one offers Undo. Images aren't saved into templates; their files belong to their board.
 - **Swimlanes:**
   - Selecting a lane's header (or its outline) shows a **lane bar**: add a lane above, add a lane below, or delete the lane with its steps. The rest of the chart moves to make room or close the gap, and arrows stay attached.
   - A new lane starts with its name being typed.
@@ -247,7 +270,8 @@ Acceptance:
 - [ ] Every shape, label and arrow is an ordinary, editable Excalidraw element. Arrows are bound to their shapes, so they follow when a step moves.
 - [ ] Inserting is one undo step, and each insert gets fresh ids, so the same template can be used twice on a board.
 - [ ] Phones reach the templates from the main menu (their toolbar has no room for the button).
-- [ ] Adding a step, adding a lane and deleting a lane are each one undo step. Elbow arrows stay square when lanes move.
+- [ ] Adding a step, inserting a step, adding a lane and deleting a lane are each one undo step. Elbow arrows stay square when lanes or steps move.
+- [ ] A saved template survives a reload and inserts with new ids, its arrows still attached.
 - [ ] A chart keeps at least one lane.
 
 ---
@@ -342,8 +366,9 @@ Acceptance:
 
 ### LIB-1 · Personal library synced · v1.1 · P1
 *As a user, I want my saved shapes available on every board and device.*
-- [ ] Items added to the Excalidraw library sidebar are saved to my account and show up in every board on any device.
+- [ ] Items added to the Excalidraw library sidebar are saved to my account and show up in every board on any device. My saved templates (EDIT-8) are library items too.
 - [ ] Removing an item removes it everywhere.
+- [ ] Saving waits for changes to settle. A failed save says so once and retries when the browser is back online. The last change wins between two open tabs.
 
 ### LIB-2 · Install public libraries · v1.1 · P2
 - [ ] "Browse libraries" opens libraries.excalidraw.com, and "Add to Excalidraw" there brings the items back into my Uncle Draw library (Excalidraw's `libraryReturnUrl` and `useHandleLibrary`).

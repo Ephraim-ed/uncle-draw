@@ -1,23 +1,34 @@
 import { CaptureUpdateAction, sceneCoordsToViewportCoords } from "@excalidraw/excalidraw";
 import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
 import type { AppState, ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
+import { openLabelEditor } from "../labelEditor";
 import type { Box } from "../table/controller";
-import { addLane, addNextStep, deleteLane, flowKind, isFlowNode, laneStack, type Direction } from "./flow";
+import {
+  addLane,
+  addNextStep,
+  arrowMiddle,
+  deleteLane,
+  flowKind,
+  insertStep,
+  isFlowNode,
+  isSplittable,
+  laneStack,
+  type Direction,
+} from "./flow";
 
 type El = ExcalidrawElement;
+
+/** How far (px) the "insert a step" button sits from its arrow. */
+const ARROW_BUTTON_OFFSET = 30;
 
 export interface FlowUi {
   /** A selected step: "+" buttons go around it. */
   node: { id: string; box: Box } | null;
   /** A selected swimlane (its header or body): the lane bar goes by its header. */
   lane: { id: string; box: Box; canDelete: boolean } | null;
+  /** A selected arrow between two steps: a "+" beside its middle inserts a step. */
+  arrow: { id: string; left: number; top: number } | null;
 }
-
-/**
- * Where a new shape must be (px inside the editor) to type into it in place:
- * clear of the toolbar, the footer and the style panel on the left.
- */
-const SAFE = { left: 240, right: 80, top: 100, bottom: 100 };
 
 /**
  * Growing flowcharts on the canvas (EDIT-8): "+" buttons around a selected
@@ -27,7 +38,7 @@ const SAFE = { left: 240, right: 80, top: 100, bottom: 100 };
 export class FlowController {
   private api: ExcalidrawImperativeAPI | null = null;
   private host: HTMLElement | null = null;
-  private ui: FlowUi = { node: null, lane: null };
+  private ui: FlowUi = { node: null, lane: null, arrow: null };
   private listeners = new Set<() => void>();
   private frame = 0;
 
@@ -69,6 +80,15 @@ export class FlowController {
     this.commit(result.elements, result.stepId);
   };
 
+  /** Splits the selected arrow with a new step and starts typing its label. One undo step. */
+  insertStep = () => {
+    const api = this.api;
+    const id = this.ui.arrow?.id;
+    if (!api || !id) return;
+    const result = insertStep(api.getSceneElementsIncludingDeleted(), id);
+    if (result) this.commit(result.elements, result.stepId);
+  };
+
   /** Adds a swimlane above or below the selected one and starts typing its name. One undo step. */
   addLane = (where: "above" | "below") => {
     const api = this.api;
@@ -99,61 +119,7 @@ export class FlowController {
       appState: { selectedElementIds: { [selectId]: true }, selectedGroupIds: {}, editingGroupId: null },
       captureUpdate: CaptureUpdateAction.IMMEDIATELY,
     });
-    if (type) this.startTyping(selectId);
-  }
-
-  /**
-   * Opens the label editor on a new shape, the way a double-click on it
-   * would (Excalidraw has no API for this). Scrolls it into view first.
-   */
-  private startTyping(id: string) {
-    const api = this.api;
-    const host = this.host;
-    if (!api || !host) return;
-    const center = () => {
-      const el = api.getSceneElements().find((e) => e.id === id);
-      return el
-        ? sceneCoordsToViewportCoords(
-            { sceneX: el.x + el.width / 2, sceneY: el.y + el.height / 2 },
-            api.getAppState(),
-          )
-        : null;
-    };
-    const open = () => {
-      const p = center();
-      // The topmost canvas under the point is the one Excalidraw listens on,
-      // even where a panel covers it.
-      const target = p
-        ? document.elementsFromPoint(p.x, p.y).find((n) => n instanceof HTMLCanvasElement && host.contains(n))
-        : null;
-      if (!p || !target) return;
-      target.dispatchEvent(
-        new MouseEvent("dblclick", {
-          bubbles: true,
-          cancelable: true,
-          clientX: p.x,
-          clientY: p.y,
-          view: window,
-        }),
-      );
-    };
-    requestAnimationFrame(() => {
-      const p = center();
-      if (!p) return;
-      const r = host.getBoundingClientRect();
-      const clear =
-        p.x > r.left + SAFE.left &&
-        p.x < r.right - SAFE.right &&
-        p.y > r.top + SAFE.top &&
-        p.y < r.bottom - SAFE.bottom;
-      if (clear) {
-        open();
-        return;
-      }
-      const el = api.getSceneElements().find((e) => e.id === id);
-      if (el) api.scrollToContent(el, { animate: false });
-      requestAnimationFrame(() => requestAnimationFrame(open));
-    });
+    if (type && this.host) openLabelEditor(this.api!, this.host, selectId);
   }
 
   private schedule = () => {
@@ -171,7 +137,7 @@ export class FlowController {
     const api = this.api;
     if (!api) return;
     const s = api.getAppState();
-    const none = { node: null, lane: null };
+    const none = { node: null, lane: null, arrow: null };
     if (
       s.viewModeEnabled ||
       s.activeTool.type !== "selection" ||
@@ -190,7 +156,23 @@ export class FlowController {
     const selected = elements.filter((el) => ids.has(el.id) && !(el.type === "text" && el.containerId));
     const el = selected.length === 1 ? selected[0]! : null;
     if (el && isFlowNode(el)) {
-      this.set({ node: { id: el.id, box: this.toBox(s, el) }, lane: null });
+      this.set({ ...none, node: { id: el.id, box: this.toBox(s, el) } });
+      return;
+    }
+    const middle = el && isSplittable(el, elements) ? arrowMiddle(el) : null;
+    if (el && middle) {
+      const origin = this.host!.getBoundingClientRect();
+      const v = sceneCoordsToViewportCoords({ sceneX: middle.x, sceneY: middle.y }, s);
+      // Beside a mostly vertical arrow, above a mostly horizontal one, clear of its own handles.
+      const vertical = el.height > el.width;
+      this.set({
+        ...none,
+        arrow: {
+          id: el.id,
+          left: v.x - origin.left + (vertical ? ARROW_BUTTON_OFFSET : 0),
+          top: v.y - origin.top - (vertical ? 0 : ARROW_BUTTON_OFFSET),
+        },
+      });
       return;
     }
     const kind = flowKind(el);
@@ -198,7 +180,7 @@ export class FlowController {
     if (el && stack) {
       const lane = stack.lanes[stack.index]!;
       this.set({
-        node: null,
+        ...none,
         lane: { id: el.id, box: this.toBox(s, lane.head ?? lane.body), canDelete: stack.lanes.length > 1 },
       });
       return;

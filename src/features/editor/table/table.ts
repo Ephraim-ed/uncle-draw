@@ -20,6 +20,10 @@ export const PART_KEY = "udTable";
 export const HEADER_KEY = "udHeader";
 export const CHECK_KEY = "udCheck";
 export const ALIGN_KEY = "udAlign";
+/** Table setting: fade the text of ticked rows. */
+export const DIM_KEY = "udDim";
+/** A cell's own fill, over the table's (a highlight). */
+export const FILL_KEY = "udFill";
 
 export function tablePart(el: ExcalidrawElement | null | undefined): TablePart | null {
   const part: unknown = el?.customData?.[PART_KEY];

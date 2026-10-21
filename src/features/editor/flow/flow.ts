@@ -17,19 +17,19 @@ import { centerOf, localBox, tablePart, unordered, type Point } from "../table/t
 type El = ExcalidrawElement;
 type Props = Record<string, unknown>;
 
-export type FlowKind = "terminal" | "step" | "decision" | "lane" | "laneHead";
+/**
+ * Shape roles in templates. The first six can grow (the "+" buttons): flowchart
+ * steps, mind-map ideas and branches, org-chart people. The rest are layout.
+ */
+const NODE_KINDS = ["terminal", "step", "decision", "idea", "branch", "person"] as const;
+const LAYOUT_KINDS = ["lane", "laneHead", "column", "colHead", "note", "milestone"] as const;
+export type FlowKind = (typeof NODE_KINDS)[number] | (typeof LAYOUT_KINDS)[number];
 export const FLOW_KEY = "udFlow";
 export type Direction = "up" | "down" | "left" | "right";
 
 export function flowKind(el: El | null | undefined): FlowKind | null {
   const kind: unknown = el?.customData?.[FLOW_KEY];
-  return kind === "terminal" ||
-    kind === "step" ||
-    kind === "decision" ||
-    kind === "lane" ||
-    kind === "laneHead"
-    ? kind
-    : null;
+  return ([...NODE_KINDS, ...LAYOUT_KINDS] as readonly unknown[]).includes(kind) ? (kind as FlowKind) : null;
 }
 
 const NODE_TYPES = new Set(["rectangle", "diamond", "ellipse"]);
@@ -53,8 +53,8 @@ const live = (elements: readonly El[]) => elements.filter((el) => !el.isDeleted)
 export function isFlowNode(el: El): boolean {
   if (el.isDeleted || el.locked || el.angle !== 0 || !NODE_TYPES.has(el.type) || tablePart(el)) return false;
   const kind = flowKind(el);
-  if (kind === "lane" || kind === "laneHead") return false;
-  return kind !== null || (el.boundElements ?? []).some((b) => b.type === "arrow");
+  if (kind !== null) return (NODE_KINDS as readonly string[]).includes(kind);
+  return (el.boundElements ?? []).some((b) => b.type === "arrow");
 }
 
 // --- Lanes -----------------------------------------------------------------------
@@ -147,18 +147,26 @@ function labelCenter(abs: readonly Point[]): Point {
   return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
 }
 
-/** Moves an arrow's start and/or end by dy; corners lined up with a moving end move with it, so elbows stay square. */
-function moveEnds(a: ExcalidrawLinearElement, dyStart: number, dyEnd: number): Point[] {
+interface Shift {
+  dx: number;
+  dy: number;
+}
+const NO_SHIFT: Shift = { dx: 0, dy: 0 };
+
+/** Moves an arrow's start and/or end; corners lined up with a moving end move with it, so elbows stay square. */
+function moveEnds(a: ExcalidrawLinearElement, start: Shift, end: Shift): Point[] {
   const abs = absPoints(a);
   const first = abs[0]!;
   const last = abs[abs.length - 1]!;
   return abs.map((p, i) => {
-    if (i === 0) return { x: p.x, y: p.y + dyStart };
-    if (i === abs.length - 1) return { x: p.x, y: p.y + dyEnd };
-    let y = p.y;
-    if (dyEnd && near(p.y, last.y)) y += dyEnd;
-    else if (dyStart && near(p.y, first.y)) y += dyStart;
-    return { x: p.x, y };
+    if (i === 0) return { x: p.x + start.dx, y: p.y + start.dy };
+    if (i === abs.length - 1) return { x: p.x + end.dx, y: p.y + end.dy };
+    let { x, y } = p;
+    if (end.dy && near(p.y, last.y)) y += end.dy;
+    else if (start.dy && near(p.y, first.y)) y += start.dy;
+    if (end.dx && near(p.x, last.x)) x += end.dx;
+    else if (start.dx && near(p.x, first.x)) x += start.dx;
+    return { x, y };
   });
 }
 
@@ -166,16 +174,17 @@ function moveEnds(a: ExcalidrawLinearElement, dyStart: number, dyEnd: number): P
  * Moves the shapes `pick` chooses by dy, with their labels. Arrows between
  * two moved shapes move whole; arrows with one moved end stretch.
  */
-function shiftShapes(elements: readonly El[], pick: (el: El) => boolean, dy: number): El[] {
+function shiftShapes(elements: readonly El[], pick: (el: El) => boolean, d: Shift): El[] {
+  const { dx, dy } = d;
   const all = live(elements);
   const moved = new Set(all.filter((el) => !isLinear(el) && !isLabel(el) && pick(el)).map((el) => el.id));
   const updates = new Map<string, Props>();
   for (const el of all) {
-    if (moved.has(el.id)) updates.set(el.id, { y: el.y + dy });
+    if (moved.has(el.id)) updates.set(el.id, { x: el.x + dx, y: el.y + dy });
   }
   for (const el of all) {
     if (isLabel(el) && moved.has((el as { containerId: string }).containerId))
-      updates.set(el.id, { y: el.y + dy });
+      updates.set(el.id, { x: el.x + dx, y: el.y + dy });
   }
   for (const el of all) {
     if (!isLinear(el)) continue;
@@ -185,8 +194,8 @@ function shiftShapes(elements: readonly El[], pick: (el: El) => boolean, dy: num
     if (!start && !end && !free) continue;
     const abs =
       start === end || free
-        ? absPoints(el).map((p) => ({ x: p.x, y: p.y + dy }))
-        : moveEnds(el, start ? dy : 0, end ? dy : 0);
+        ? absPoints(el).map((p) => ({ x: p.x + dx, y: p.y + dy }))
+        : moveEnds(el, start ? d : NO_SHIFT, end ? d : NO_SHIFT);
     updates.set(el.id, linearProps(abs));
     const label = all.find((t) => t.type === "text" && t.containerId === el.id);
     if (label) {
@@ -223,7 +232,7 @@ export function addLane(
   const line = where === "below" ? ref.body.y + ref.body.height : ref.body.y;
   const height = ref.body.height;
   const { x1, x2 } = laneSpan(stack);
-  const next = shiftShapes(elements, below(line, x1, x2), height);
+  const next = shiftShapes(elements, below(line, x1, x2), { dx: 0, dy: height });
 
   const copy = (el: El, kind: FlowKind): El =>
     unordered([
@@ -293,10 +302,10 @@ export function deleteLane(elements: readonly El[], laneId: string): El[] | null
     return el;
   });
   const { x1, x2 } = laneSpan(stack);
-  return shiftShapes(next, below(body.y + body.height, x1, x2), -body.height);
+  return shiftShapes(next, below(body.y + body.height, x1, x2), { dx: 0, dy: -body.height });
 }
 
-// --- Next step -----------------------------------------------------------------------
+// --- Next step ---------------------------------------------------------------------
 
 interface Rect {
   x: number;
@@ -306,6 +315,7 @@ interface Rect {
 }
 
 const OPPOSITE: Record<Direction, Direction> = { up: "down", down: "up", left: "right", right: "left" };
+const isVertical = (dir: Direction) => dir === "up" || dir === "down";
 
 function anchor(r: Rect, side: Direction): Point {
   switch (side) {
@@ -320,29 +330,219 @@ function anchor(r: Rect, side: Direction): Point {
   }
 }
 
-/** Whether `r` would land on another shape (lanes themselves don't count; their headers do). */
-function blocked(elements: readonly El[], r: Rect, except: string): boolean {
+/** The direction from a to b along whichever axis is longer. */
+function directionOf(a: Point, b: Point): Direction {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  return Math.abs(dx) >= Math.abs(dy) ? (dx >= 0 ? "right" : "left") : dy >= 0 ? "down" : "up";
+}
+
+/** Shapes that would sit on `r` (lanes and columns themselves don't count; their headers do). */
+function blockers(elements: readonly El[], r: Rect, except: string): El[] {
   const pad = 12;
-  return live(elements).some((el) => {
-    if (
-      el.id === except ||
-      isLinear(el) ||
-      el.type === "text" ||
-      el.type === "frame" ||
-      flowKind(el) === "lane"
-    ) {
-      return false;
-    }
+  return live(elements).filter((el) => {
+    if (el.id === except || isLinear(el) || el.type === "text" || el.type === "frame") return false;
+    const kind = flowKind(el);
+    if (kind === "lane" || kind === "column") return false;
     const [x1, y1, x2, y2] = localBox(el);
     return x1 < r.x + r.width + pad && x2 > r.x - pad && y1 < r.y + r.height + pad && y2 > r.y - pad;
   });
 }
 
+interface StepLook {
+  width: number;
+  height: number;
+  fill: string;
+  fillStyle: El["fillStyle"];
+  roundness: El["roundness"];
+  kind: FlowKind | null;
+}
+
+/**
+ * What a new step after `src` looks like: like `src` if it's a box, else like
+ * a box it's joined to (so a question's or a mind map's next step matches
+ * the others), else a template step.
+ */
+function stepLook(all: readonly El[], src: El): StepLook {
+  const neighbor = all.flatMap((el) => {
+    if (el.type !== "arrow") return [];
+    const other =
+      el.startBinding?.elementId === src.id
+        ? el.endBinding?.elementId
+        : el.endBinding?.elementId === src.id
+          ? el.startBinding?.elementId
+          : undefined;
+    const shape = other ? all.find((s) => s.id === other) : undefined;
+    return shape && shape.type === "rectangle" && isFlowNode(shape) ? [shape] : [];
+  })[0];
+  const model = src.type === "rectangle" ? src : neighbor;
+  const tagged = flowKind(src) !== null;
+  if (model) {
+    return {
+      width: model.width,
+      height: model.height,
+      fill: model.backgroundColor,
+      fillStyle: model.fillStyle,
+      roundness: model.roundness,
+      kind: flowKind(model) ?? (tagged ? "step" : null),
+    };
+  }
+  return {
+    ...STEP_SIZE,
+    fill: tagged ? STEP_FILL : src.backgroundColor,
+    fillStyle: src.fillStyle,
+    roundness: { type: ROUNDNESS.ADAPTIVE_RADIUS },
+    kind: tagged ? "step" : null,
+  };
+}
+
+/**
+ * Where a step after `src` goes in a direction, before stepping past
+ * anything in the way. In a swimlane, left/right stays in the lane and
+ * up/down goes to the middle of the lane next door.
+ */
+function nextSlot(elements: readonly El[], src: El, dir: Direction, look: StepLook) {
+  const { width, height } = look;
+  const c = centerOf(src);
+  const here = laneAt(elements, c);
+  const vertical = isVertical(dir);
+  const lane = here
+    ? (here.lanes[vertical ? here.index + (dir === "down" ? 1 : -1) : here.index] ?? null)
+    : null;
+  const r: Rect =
+    dir === "right"
+      ? { x: src.x + src.width + STEP_GAP, y: c.y - height / 2, width, height }
+      : dir === "left"
+        ? { x: src.x - STEP_GAP - width, y: c.y - height / 2, width, height }
+        : dir === "down"
+          ? { x: c.x - width / 2, y: src.y + src.height + STEP_GAP, width, height }
+          : { x: c.x - width / 2, y: src.y - STEP_GAP - height, width, height };
+  if (lane && vertical) r.y = lane.body.y + (lane.body.height - height) / 2;
+  // Past anything in the way: along the flow, or to the right within a lane.
+  const past: Shift =
+    lane && vertical
+      ? { dx: width + STEP_GAP, dy: 0 }
+      : dir === "left"
+        ? { dx: -(width + STEP_GAP), dy: 0 }
+        : dir === "right"
+          ? { dx: width + STEP_GAP, dy: 0 }
+          : { dx: 0, dy: dir === "up" ? -(height + STEP_GAP) : height + STEP_GAP };
+  return { r, lane, past };
+}
+
+function stepPast(elements: readonly El[], r: Rect, past: Shift, except: string): Rect {
+  let at = r;
+  for (let i = 0; i < 20 && blockers(elements, at, except).length > 0; i++) {
+    at = { ...at, x: at.x + past.dx, y: at.y + past.dy };
+  }
+  return at;
+}
+
+function makeStep(src: El, look: StepLook, r: Rect): El {
+  return unordered([
+    {
+      type: "rectangle",
+      ...r,
+      strokeColor: src.strokeColor,
+      strokeWidth: src.strokeWidth,
+      strokeStyle: src.strokeStyle,
+      roughness: src.roughness,
+      opacity: src.opacity,
+      backgroundColor: look.fill,
+      fillStyle: look.fillStyle,
+      roundness: look.roundness,
+      frameId: src.frameId,
+      ...(look.kind ? { customData: { [FLOW_KEY]: look.kind } } : {}),
+    },
+  ])[0]!;
+}
+
+/** An arrow's corners: straight along the flow, or square elbows when the ends don't line up. */
+function route(from: Point, to: Point, dir: Direction): Point[] {
+  if (isVertical(dir) && !near(from.x, to.x)) {
+    // Bend near the target, so a sideways leg never runs along a lane line.
+    const bendY = to.y + (dir === "down" ? -1 : 1) * Math.min(22, Math.abs(to.y - from.y) / 2);
+    return [from, { x: from.x, y: bendY }, { x: to.x, y: bendY }, to];
+  }
+  if (!isVertical(dir) && !near(from.y, to.y)) {
+    const midX = (from.x + to.x) / 2;
+    return [from, { x: midX, y: from.y }, { x: midX, y: to.y }, to];
+  }
+  return [from, to];
+}
+
+const binding = (elementId: string): PointBinding => ({ elementId, focus: 0, gap: BIND_GAP });
+
+/** A new arrow along `path` from one shape to another, styled like `like` (or the shape `style`). */
+function makeArrow(
+  path: readonly Point[],
+  fromId: string,
+  toId: string,
+  style: El,
+  like?: ExcalidrawArrowElement,
+): El {
+  const geometry = linearProps(path);
+  const [base] = unordered([
+    {
+      type: "arrow",
+      x: path[0]!.x,
+      y: path[0]!.y,
+      width: geometry.width as number,
+      height: geometry.height as number,
+      points: geometry.points as unknown as ExcalidrawLinearElement["points"],
+      roundness: null,
+      strokeColor: like?.strokeColor ?? style.strokeColor,
+      strokeWidth: like?.strokeWidth ?? style.strokeWidth,
+      strokeStyle: like?.strokeStyle ?? style.strokeStyle,
+      roughness: like?.roughness ?? style.roughness,
+      startArrowhead: like ? like.startArrowhead : null,
+      endArrowhead: like ? like.endArrowhead : "arrow",
+      frameId: style.frameId,
+    },
+  ]);
+  return {
+    ...(base as ExcalidrawArrowElement),
+    ...geometry,
+    startBinding: binding(fromId),
+    endBinding: binding(toId),
+  } as El;
+}
+
+/** Lanes grow wider so every step in their stack keeps a margin before the end. */
+function fitLanes(elements: El[], laneId: string | undefined): El[] {
+  const stack = laneId ? laneStack(elements, laneId) : null;
+  if (!stack) return elements;
+  const bodies = stack.lanes.map((l) => l.body);
+  const top = Math.min(...bodies.map((b) => b.y));
+  const bottom = Math.max(...bodies.map((b) => b.y + b.height));
+  const left = bodies[0]!.x;
+  const right = Math.max(
+    0,
+    ...live(elements)
+      .filter((el) => {
+        const kind = flowKind(el);
+        if (isLinear(el) || el.type === "text" || kind === "lane" || kind === "laneHead") return false;
+        const c = centerOf(el);
+        return c.y > top && c.y < bottom && c.x > left;
+      })
+      .map((el) => el.x + el.width + LANE_MARGIN),
+  );
+  if (right <= left + bodies[0]!.width) return elements;
+  const ids = new Set(bodies.map((b) => b.id));
+  return elements.map((el) => (ids.has(el.id) ? newElementWith(el, { width: right - el.x }) : el));
+}
+
+const arrowAt = (all: readonly El[], shapeId: string) =>
+  all.find(
+    (el): el is ExcalidrawArrowElement =>
+      el.type === "arrow" && (el.startBinding?.elementId === shapeId || el.endBinding?.elementId === shapeId),
+  );
+
 /**
  * Adds a step next to `sourceId` in a direction, connected by a bound arrow.
  * In a swimlane, left/right stays in the lane and up/down goes to the lane
- * next door; lanes grow when a step would stick out. New steps look like the
- * source's steps (template steps stay blue rounded boxes).
+ * next door; lanes grow when a step would stick out. The new step looks like
+ * its neighbors.
  */
 export function addNextStep(
   elements: readonly El[],
@@ -352,119 +552,112 @@ export function addNextStep(
   const all = live(elements);
   const src = all.find((el) => el.id === sourceId);
   if (!src || !isFlowNode(src)) return null;
-  const tagged = flowKind(src) !== null;
-  const box = src.type === "rectangle";
-  const width = box ? src.width : STEP_SIZE.width;
-  const height = box ? src.height : STEP_SIZE.height;
-  const c = centerOf(src);
-
-  // Which lane the step goes in, if the source is in a swimlane.
-  const here = laneAt(elements, c);
-  let lane = here ? here.lanes[here.index]! : null;
-  const vertical = dir === "up" || dir === "down";
-  if (here && vertical) lane = here.lanes[here.index + (dir === "down" ? 1 : -1)] ?? null;
-  const inLanes = !!here && !!lane;
-
-  let r: Rect;
-  switch (dir) {
-    case "right":
-      r = { x: src.x + src.width + STEP_GAP, y: c.y - height / 2, width, height };
-      break;
-    case "left":
-      r = { x: src.x - STEP_GAP - width, y: c.y - height / 2, width, height };
-      break;
-    case "down":
-      r = { x: c.x - width / 2, y: src.y + src.height + STEP_GAP, width, height };
-      break;
-    case "up":
-      r = { x: c.x - width / 2, y: src.y - STEP_GAP - height, width, height };
-      break;
-  }
-  if (inLanes && vertical) r.y = lane!.body.y + (lane!.body.height - height) / 2;
-  // Step past anything in the way: along the flow, or to the right within a lane.
-  const step = {
-    x: dir === "left" ? -(width + STEP_GAP) : dir === "right" || (inLanes && vertical) ? width + STEP_GAP : 0,
-    y: inLanes && vertical ? 0 : dir === "up" ? -(height + STEP_GAP) : dir === "down" ? height + STEP_GAP : 0,
-  };
-  for (let i = 0; i < 20 && blocked(elements, r, src.id); i++) {
-    r = { ...r, x: r.x + step.x, y: r.y + step.y };
-  }
-
-  const fill = tagged ? (flowKind(src) === "step" ? src.backgroundColor : STEP_FILL) : src.backgroundColor;
-  const shape = unordered([
-    {
-      type: "rectangle",
-      ...r,
-      strokeColor: src.strokeColor,
-      strokeWidth: src.strokeWidth,
-      strokeStyle: src.strokeStyle,
-      roughness: src.roughness,
-      opacity: src.opacity,
-      backgroundColor: fill,
-      fillStyle: src.fillStyle,
-      roundness: box ? src.roundness : { type: ROUNDNESS.ADAPTIVE_RADIUS },
-      frameId: src.frameId,
-      ...(tagged ? { customData: { [FLOW_KEY]: "step" } } : {}),
-    },
-  ])[0]!;
-
-  // The arrow: straight along the flow, or square elbows when the step had to shift sideways.
-  const from = anchor(src, dir);
-  const to = anchor(r, OPPOSITE[dir]);
-  let path: Point[] = [from, to];
-  if (vertical && !near(from.x, to.x)) {
-    // Bend just inside the target's lane, so the sideways leg never runs along a lane line.
-    const bendY = to.y + (dir === "down" ? -1 : 1) * Math.min(22, Math.abs(to.y - from.y) / 2);
-    path = [from, { x: from.x, y: bendY }, { x: to.x, y: bendY }, to];
-  } else if (!vertical && !near(from.y, to.y)) {
-    const midX = (from.x + to.x) / 2;
-    path = [from, { x: midX, y: from.y }, { x: midX, y: to.y }, to];
-  }
-  const like = all.find(
-    (el): el is ExcalidrawArrowElement =>
-      el.type === "arrow" && (el.startBinding?.elementId === src.id || el.endBinding?.elementId === src.id),
-  );
-  const geometry = linearProps(path);
-  const [base] = unordered([
-    {
-      type: "arrow",
-      x: from.x,
-      y: from.y,
-      width: geometry.width as number,
-      height: geometry.height as number,
-      points: geometry.points as unknown as ExcalidrawLinearElement["points"],
-      roundness: null,
-      strokeColor: like?.strokeColor ?? src.strokeColor,
-      strokeWidth: like?.strokeWidth ?? src.strokeWidth,
-      strokeStyle: like?.strokeStyle ?? src.strokeStyle,
-      roughness: like?.roughness ?? src.roughness,
-      startArrowhead: like?.startArrowhead ?? null,
-      endArrowhead: like?.endArrowhead ?? "arrow",
-      frameId: src.frameId,
-    },
-  ]);
-  const binding = (elementId: string): PointBinding => ({ elementId, focus: 0, gap: BIND_GAP });
-  const arrow = {
-    ...(base as ExcalidrawArrowElement),
-    ...geometry,
-    startBinding: binding(src.id),
-    endBinding: binding(shape.id),
-  } as El;
+  const look = stepLook(all, src);
+  const slot = nextSlot(elements, src, dir, look);
+  const r = stepPast(elements, slot.r, slot.past, src.id);
+  const shape = makeStep(src, look, r);
+  const path = route(anchor(src, dir), anchor(r, OPPOSITE[dir]), dir);
+  const arrow = makeArrow(path, src.id, shape.id, src, arrowAt(all, src.id));
   const ref = { type: "arrow" as const, id: arrow.id };
   const placed = { ...shape, boundElements: [ref] } as El;
-
-  let next = elements.map((el) =>
+  const next = elements.map((el) =>
     el.id === src.id ? newElementWith(el, { boundElements: [...(el.boundElements ?? []), ref] }) : el,
   );
-  // Lanes grow to keep the new step inside.
-  if (inLanes) {
-    const stack = laneStack(next, lane!.body.id)!;
-    const right = r.x + r.width + LANE_MARGIN;
-    const end = lane!.body.x + lane!.body.width;
-    if (right > end) {
-      const ids = new Set(stack.lanes.map((l) => l.body.id));
-      next = next.map((el) => (ids.has(el.id) ? newElementWith(el, { width: right - el.x }) : el));
+  return { elements: fitLanes([...next, placed, arrow], slot.lane?.body.id), stepId: placed.id };
+}
+
+/** Shapes reachable from `fromId` by following arrows forward, never through `stopId`. */
+function downstream(all: readonly El[], fromId: string, stopId: string): Set<string> {
+  const seen = new Set<string>([fromId]);
+  const queue = [fromId];
+  while (queue.length > 0) {
+    const id = queue.shift()!;
+    for (const el of all) {
+      if (el.type !== "arrow" || el.startBinding?.elementId !== id) continue;
+      const next = el.endBinding?.elementId;
+      if (next && next !== stopId && !seen.has(next)) {
+        seen.add(next);
+        queue.push(next);
+      }
     }
   }
-  return { elements: [...next, placed, arrow], stepId: placed.id };
+  return seen;
+}
+
+/** An arrow between two flowchart steps, which a step can be inserted into. */
+export function isSplittable(el: El, elements: readonly El[]): boolean {
+  if (el.type !== "arrow" || el.isDeleted || el.locked) return false;
+  const ends = [el.startBinding?.elementId, el.endBinding?.elementId].map((id) =>
+    id ? elements.find((s) => s.id === id && !s.isDeleted) : undefined,
+  );
+  return ends.every((s) => !!s && isFlowNode(s));
+}
+
+/** Where to show the "insert a step" button for an arrow: its middle (scene coords). */
+export function arrowMiddle(el: El): Point | null {
+  return el.type === "arrow" ? labelCenter(absPoints(el)) : null;
+}
+
+/**
+ * Splits the arrow between two steps with a new step. It goes where the
+ * arrow leaves its start; if the next steps are in the way, they (and
+ * everything after them) move along to make room. The arrow keeps its label
+ * and now ends at the new step; a new arrow goes on to the old target.
+ */
+export function insertStep(
+  elements: readonly El[],
+  arrowId: string,
+): { elements: El[]; stepId: string } | null {
+  const all = live(elements);
+  const arrow = all.find((el): el is ExcalidrawArrowElement => el.id === arrowId && el.type === "arrow");
+  if (!arrow || !isSplittable(arrow, all)) return null;
+  const from = all.find((el) => el.id === arrow.startBinding!.elementId)!;
+  const target = all.find((el) => el.id === arrow.endBinding!.elementId)!;
+
+  const abs = absPoints(arrow);
+  const dir = directionOf(abs[0]!, abs[1] ?? centerOf(target));
+  const look = stepLook(all, from);
+  const slot = nextSlot(elements, from, dir, look);
+  let next: El[] = [...elements];
+  // Make room: the steps after this one move along.
+  const after = downstream(all, target.id, from.id);
+  if (blockers(next, slot.r, from.id).some((el) => after.has(el.id))) {
+    next = shiftShapes(next, (el) => after.has(el.id), slot.past);
+  }
+  const r = stepPast(next, slot.r, slot.past, from.id);
+  const shape = makeStep(from, look, r);
+
+  // The old arrow now ends at the new step; a new one goes on to the old target.
+  const toShape = route(anchor(from, dir), anchor(r, OPPOSITE[dir]), dir);
+  const label = live(next).find((t) => t.type === "text" && t.containerId === arrow.id);
+  const moved = live(next).find((el) => el.id === target.id)!;
+  const onward = directionOf(centerOf(shape), centerOf(moved));
+  const onwardPath = route(anchor(r, onward), anchor(moved, OPPOSITE[onward]), onward);
+  const onwardArrow = makeArrow(onwardPath, shape.id, target.id, from, arrow);
+  const placed = {
+    ...shape,
+    boundElements: [
+      { type: "arrow" as const, id: arrow.id },
+      { type: "arrow" as const, id: onwardArrow.id },
+    ],
+  } as El;
+  next = next.map((el) => {
+    if (el.id === arrow.id) {
+      const update = { ...linearProps(toShape), endBinding: binding(shape.id) };
+      return newElementWith(el, update as Parameters<typeof newElementWith>[1]);
+    }
+    if (label && el.id === label.id) {
+      const c = labelCenter(toShape);
+      return newElementWith(el, { x: c.x - label.width / 2, y: c.y - label.height / 2 });
+    }
+    if (el.id === target.id) {
+      const bound = (el.boundElements ?? []).map((b) =>
+        b.id === arrow.id ? { ...b, id: onwardArrow.id } : b,
+      );
+      return newElementWith(el, { boundElements: bound });
+    }
+    return el;
+  });
+  const lane = slot.lane?.body.id ?? laneAt(next, centerOf(from))?.lanes[0]?.body.id;
+  return { elements: fitLanes([...next, placed, onwardArrow], lane), stepId: placed.id };
 }

@@ -15,11 +15,13 @@ import type {
   BinaryFiles,
   ExcalidrawImperativeAPI,
   ExcalidrawInitialDataState,
+  LibraryItem,
   UIAppState,
   UIOptions,
 } from "@excalidraw/excalidraw/types";
 import {
   IconArrowLeft,
+  IconDeviceFloppy,
   IconDownload,
   IconPencil,
   IconShare,
@@ -71,9 +73,11 @@ import { paperColor, type TableSetup } from "./table/options";
 import { TableBar } from "./table/TableBar";
 import { TableToolbarButtons } from "./table/TableToolbar";
 import { useToolbarSlot } from "./table/useToolbarSlot";
-import type { FlowchartTemplate } from "./templates/flowcharts";
-import { insertTemplate } from "./templates/insertTemplate";
-import { TemplatesDialog } from "./templates/TemplatesDialog";
+import { selectionForTemplate } from "../library/clone";
+import { LibrarySync } from "../library/librarySync";
+import { insertSaved, insertTemplate } from "./templates/insertTemplate";
+import type { Template } from "./templates/templates";
+import { SaveTemplateDialog, TemplatesDialog } from "./templates/TemplatesDialog";
 import { useBoardLoad, type ReadyBoard } from "./useBoardLoad";
 
 const UI_OPTIONS: Partial<UIOptions> = {
@@ -168,6 +172,19 @@ function BoardEditor({ data, onGone }: { data: ReadyBoard; onGone: () => void })
   const [renameOpen, setRenameOpen] = useState(false);
   const [tableOpen, setTableOpen] = useState(false);
   const [templatesOpen, setTemplatesOpen] = useState(false);
+  /** Shapes being saved as a template (EDIT-8), while the name dialog is open. */
+  const [saving, setSaving] = useState<ReturnType<typeof selectionForTemplate> | null>(null);
+  const [canSaveSelection, setCanSaveSelection] = useState(false);
+  // My library, synced to my account (LIB-1); my saved templates live in it.
+  const [library] = useState(
+    () =>
+      new LibrarySync(user.id, undefined, () =>
+        toast({ message: "Your templates didn't save. We'll try again when you're back online." }),
+      ),
+  );
+  useEffect(() => library.start(), [library]);
+  const libraryItems = useMemo(() => library.load(), [library]);
+  const mine = useSyncExternalStore(library.subscribe, library.getItems);
   const [api, setApi] = useState<ExcalidrawImperativeAPI | null>(null);
   const [host, setHost] = useState<HTMLDivElement | null>(null);
   useDocumentTitle(title);
@@ -219,8 +236,9 @@ function BoardEditor({ data, onGone }: { data: ReadyBoard; onGone: () => void })
       elements: data.elements as ExcalidrawElement[],
       appState: initialAppState as ExcalidrawInitialDataState["appState"],
       scrollToContent: !data.viewport && data.elements.some((el) => !el.isDeleted),
+      libraryItems,
     }),
-    [data, initialAppState],
+    [data, initialAppState, libraryItems],
   );
 
   // Sign-out flushes every open editor (AUTH-3).
@@ -375,11 +393,64 @@ function BoardEditor({ data, onGone }: { data: ReadyBoard; onGone: () => void })
     if (!inViewMode()) setTableOpen(true);
   }, [inViewMode]);
   const openTemplates = useCallback(() => {
-    if (!inViewMode()) setTemplatesOpen(true);
-  }, [inViewMode]);
+    if (inViewMode()) return;
+    setCanSaveSelection(!!api && Object.keys(api.getAppState().selectedElementIds).length > 0);
+    setTemplatesOpen(true);
+  }, [api, inViewMode]);
+  /** Main menu → "Save as template…", or the button in the Templates dialog. */
+  const startSaving = useCallback(() => {
+    if (!api || inViewMode()) return;
+    const picked = selectionForTemplate(api.getSceneElements(), api.getAppState().selectedElementIds);
+    if (picked.elements.length === 0) {
+      toast({
+        message: picked.skippedImages
+          ? "Images can't go into templates. Select some shapes too."
+          : "Select the shapes you want to keep first.",
+      });
+      return;
+    }
+    setTemplatesOpen(false);
+    setSaving(picked);
+  }, [api, inViewMode, toast]);
+  const saveTemplate = useCallback(
+    (name: string) => {
+      if (!api || !saving) return;
+      const item: LibraryItem = {
+        id: crypto.randomUUID(),
+        status: "unpublished",
+        elements: saving.elements,
+        created: Date.now(),
+        name,
+      };
+      void api.updateLibrary({ libraryItems: [item], merge: true });
+      toast({ message: `Saved “${name}” to your templates.` });
+    },
+    [api, saving, toast],
+  );
+  const insertMine = useCallback(
+    (item: LibraryItem) => {
+      if (api) insertSaved(api, item);
+    },
+    [api],
+  );
+  const removeMine = useCallback(
+    (item: LibraryItem) => {
+      if (!api) return;
+      const before = library.getItems();
+      void api.updateLibrary({ libraryItems: before.filter((i) => i.id !== item.id), merge: false });
+      toast({
+        message: `Removed “${item.name || "Untitled template"}”.`,
+        action: {
+          label: "Undo",
+          onClick: () => void api.updateLibrary({ libraryItems: before, merge: false }),
+        },
+      });
+    },
+    [api, library, toast],
+  );
   const addTable = useCallback((setup: TableSetup) => tables.insert(setup), [tables]);
   const addTemplate = useCallback(
-    (template: FlowchartTemplate) => {
+    (template: Template) => {
       if (api) insertTemplate(api, template);
     },
     [api],
@@ -430,7 +501,10 @@ function BoardEditor({ data, onGone }: { data: ReadyBoard; onGone: () => void })
             Insert table…
           </MainMenu.Item>
           <MainMenu.Item icon={<IconSitemap size={16} stroke={1.75} />} onSelect={openTemplates}>
-            Flowchart templates…
+            Templates…
+          </MainMenu.Item>
+          <MainMenu.Item icon={<IconDeviceFloppy size={16} stroke={1.75} />} onSelect={startSaving}>
+            Save as template…
           </MainMenu.Item>
           <MainMenu.DefaultItems.SaveAsImage />
           <MainMenu.Item icon={<IconDownload size={16} stroke={1.75} />} onSelect={saveToFile}>
@@ -479,7 +553,17 @@ function BoardEditor({ data, onGone }: { data: ReadyBoard; onGone: () => void })
         </WelcomeScreen>
       </>
     ),
-    [backToBoards, saveToFile, setting, setTheme, isOwner, openTableDialog, openTemplates, footerTools],
+    [
+      backToBoards,
+      saveToFile,
+      setting,
+      setTheme,
+      isOwner,
+      openTableDialog,
+      openTemplates,
+      startSaving,
+      footerTools,
+    ],
   );
 
   return (
@@ -498,6 +582,7 @@ function BoardEditor({ data, onGone }: { data: ReadyBoard; onGone: () => void })
           validateEmbeddable={EMBED_ALLOW_LIST}
           renderTopRightUI={renderTopRightUI}
           onPaste={tables.onPaste}
+          onLibraryChange={library.handleChange}
         >
           {children}
         </Excalidraw>
@@ -523,7 +608,22 @@ function BoardEditor({ data, onGone }: { data: ReadyBoard; onGone: () => void })
         />
       ) : null}
       {templatesOpen ? (
-        <TemplatesDialog onClose={() => setTemplatesOpen(false)} onPick={addTemplate} />
+        <TemplatesDialog
+          mine={mine}
+          onClose={() => setTemplatesOpen(false)}
+          onPick={addTemplate}
+          onPickMine={insertMine}
+          onRemoveMine={removeMine}
+          onSaveSelection={canSaveSelection ? startSaving : undefined}
+        />
+      ) : null}
+      {saving ? (
+        <SaveTemplateDialog
+          count={saving.elements.filter((el) => el.type !== "text" || !el.containerId).length}
+          skippedImages={saving.skippedImages}
+          onClose={() => setSaving(null)}
+          onSave={saveTemplate}
+        />
       ) : null}
       {shareOpen ? (
         <ShareDialog
