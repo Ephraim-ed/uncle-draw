@@ -5,12 +5,14 @@ import type {
   ExcalidrawLinearElement,
   FillStyle,
 } from "@excalidraw/excalidraw/element/types";
+import { FLOW_KEY } from "../flow/flow";
 
 /**
  * Flowchart templates (EDIT-8): ready-made diagrams of ordinary, editable
  * shapes. Arrows are bound to their shapes, so they follow when a step moves.
  * Each template is laid out in its own coordinates; `buildTemplate` moves it
- * to where it's inserted.
+ * to where it's inserted. Shapes are tagged with their role, so the chart can
+ * grow afterwards (flow/flow.ts).
  */
 
 type Kind = "terminal" | "step" | "decision" | "laneHead" | "lane";
@@ -302,6 +304,8 @@ export function buildTemplate(t: FlowchartTemplate, at: { x: number; y: number }
       fillStyle: n.kind === "laneHead" ? "solid" : style.fillStyle,
       roundness:
         n.kind === "step" ? { type: ROUNDNESS.ADAPTIVE_RADIUS } : n.kind === "lane" ? null : undefined,
+      // Tags let the chart grow later: next steps, more lanes (flow/flow.ts).
+      customData: { [FLOW_KEY]: n.kind },
       ...line,
       ...(n.label
         ? {

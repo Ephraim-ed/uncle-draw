@@ -225,7 +225,7 @@ Acceptance:
 - [ ] Ticks survive a reload, reach collaborators live, and show (read-only) in share views.
 
 ### EDIT-8 · Flowchart templates · v1.1 · P1
-*As a user, I want to start a flowchart from a ready-made shape instead of drawing every box and arrow.*
+*As a user, I want to start a flowchart from a ready-made shape instead of drawing every box and arrow, and keep growing it.*
 - The **Flowchart templates** button in the toolbar (after the Table tool), or Main menu → "Flowchart templates…", opens a picker with a live preview of each template:
   - Simple process
   - Left to right
@@ -234,11 +234,21 @@ Acceptance:
   - Three-way choice
   - Swimlanes
 - The pick drops into the middle of the view, selected, in the current stroke color, width, sloppiness, fill style and font. Ends are green, steps blue and questions yellow.
+- **Adding the next step:** a selected step shows four **"+"** buttons, one on each side. This works for template steps and for any box, diamond or ellipse that has arrows.
+  - A click adds a new step on that side, joined by an arrow, and starts typing its name.
+  - The new step looks like its neighbors.
+  - If something is already there, the step goes past it.
+- **Swimlanes:**
+  - Selecting a lane's header (or its outline) shows a **lane bar**: add a lane above, add a lane below, or delete the lane with its steps. The rest of the chart moves to make room or close the gap, and arrows stay attached.
+  - A new lane starts with its name being typed.
+  - In a lane, "+" left or right keeps the new step in that lane, and "+" up or down puts it in the middle of the lane next door. Lanes grow wider when a step would stick out.
 
 Acceptance:
 - [ ] Every shape, label and arrow is an ordinary, editable Excalidraw element. Arrows are bound to their shapes, so they follow when a step moves.
 - [ ] Inserting is one undo step, and each insert gets fresh ids, so the same template can be used twice on a board.
 - [ ] Phones reach the templates from the main menu (their toolbar has no room for the button).
+- [ ] Adding a step, adding a lane and deleting a lane are each one undo step. Elbow arrows stay square when lanes move.
+- [ ] A chart keeps at least one lane.
 
 ---
 

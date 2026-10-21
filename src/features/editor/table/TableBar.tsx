@@ -20,6 +20,7 @@ import {
   type ReactNode,
 } from "react";
 import { IconButton, SketchArt, hashSeed } from "../../../components/sketch";
+import { leftEdge } from "../overlay";
 import type { Box, TableController, TableDraft, TableFocus, TableGuide } from "./controller";
 import { ALIGN_OPTIONS, WIDTH_OPTIONS } from "./lookOptions";
 import { BORDER_COLORS, FILL_COLORS, PAPER } from "./options";
@@ -99,8 +100,8 @@ function place(box: Box, width: number, height: number) {
   if (top + height > vh - BOTTOM_SAFE)
     top = Math.max(TOP_SAFE, Math.min(vh - BOTTOM_SAFE - height, box.top + GAP));
   const left = Math.min(
-    Math.max(EDGE, box.left + box.width / 2 - width / 2),
-    Math.max(EDGE, vw - width - EDGE),
+    Math.max(leftEdge(), box.left + box.width / 2 - width / 2),
+    Math.max(leftEdge(), vw - width - EDGE),
   );
   return { top, left, up: top > vh / 2 };
 }
@@ -199,7 +200,7 @@ function Bar({
         ref={ref}
         role="toolbar"
         aria-label="Table"
-        className="ud-shell ud-tablebar ud-sketch"
+        className="ud-shell ud-floatbar ud-sketch"
         style={{ left, top, visibility: size.width ? "visible" : "hidden" }}
         onMouseDown={keepFocus}
       >
@@ -217,7 +218,7 @@ function Bar({
         >
           <IconRowRemove {...ICON} />
         </BarButton>
-        <span className="ud-tablebar__divider" />
+        <span className="ud-floatbar__divider" />
         <BarButton label="Insert column left" onClick={() => controller.insertCol("left")}>
           <IconColumnInsertLeft {...ICON} />
         </BarButton>
@@ -231,7 +232,7 @@ function Bar({
         >
           <IconColumnRemove {...ICON} />
         </BarButton>
-        <span className="ud-tablebar__divider" />
+        <span className="ud-floatbar__divider" />
         <BarButton
           label="Header row"
           pressed={focus.header}
@@ -246,7 +247,7 @@ function Bar({
         >
           <IconListCheck {...ICON} />
         </BarButton>
-        <span className="ud-tablebar__divider" />
+        <span className="ud-floatbar__divider" />
         {ALIGN_OPTIONS.map((o) => (
           <BarButton
             key={o.value}
@@ -257,7 +258,7 @@ function Bar({
             {o.icon}
           </BarButton>
         ))}
-        <span className="ud-tablebar__divider" />
+        <span className="ud-floatbar__divider" />
         <BarButton label="Table style" expanded={styleOpen} onClick={() => setStyleOpen((open) => !open)}>
           <IconPalette {...ICON} />
         </BarButton>
@@ -284,7 +285,7 @@ function StylePanel({
   const fill = (color: string) => (color === PAPER ? paper : color);
   return (
     <div
-      className="ud-tablebar__panel ud-sketch"
+      className="ud-floatbar__panel ud-sketch"
       data-up={up ? "" : undefined}
       role="group"
       aria-label="Table style"
@@ -318,7 +319,7 @@ function StylePanel({
         options={WIDTH_OPTIONS}
         onChange={(borderWidth) => controller.setLook({ borderWidth })}
       />
-      <div className="ud-tablebar__sizes">
+      <div className="ud-floatbar__sizes">
         <SizeField
           label="Column width"
           value={focus.activeSize?.width ?? null}

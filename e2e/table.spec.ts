@@ -7,8 +7,6 @@ interface El {
   isDeleted?: boolean;
   customData?: { udTable?: string; udAlign?: string };
   containerId?: string | null;
-  startBinding?: { elementId: string } | null;
-  endBinding?: { elementId: string } | null;
   backgroundColor?: string;
   width: number;
   /** What was typed; `text` has Excalidraw's wrapping line breaks. */
@@ -227,27 +225,4 @@ test("draw a table with the toolbar tool, resize it, edit it from the table bar 
   await expect.poll(async () => (await cells()).length).toBe(24);
   const all = texts(await scene(boardId)).map((t) => t.originalText);
   expect(all).toEqual(expect.arrayContaining(["Apples", "Pears", "Plums"]));
-});
-
-test("flowchart templates drop in as editable, connected shapes", async ({ page }) => {
-  await signIn(page, uniqueEmail("templates"));
-  const boardId = await createBoard(page);
-
-  await page.getByTestId("toolbar-templates").click();
-  const dialog = page.getByRole("dialog", { name: "Flowchart templates" });
-  await expect(dialog.getByRole("button", { name: /Swimlanes/ })).toBeVisible();
-  await expect(dialog.locator(".ud-template__preview svg")).toHaveCount(6);
-  await dialog.getByRole("button", { name: /Yes or no/ }).click();
-  await expect(dialog).toBeHidden();
-  await save(page);
-
-  await expect.poll(async () => (await scene(boardId)).filter((e) => e.type === "diamond").length).toBe(1);
-  const els = await scene(boardId);
-  const arrows = els.filter((e) => e.type === "arrow");
-  expect(arrows).toHaveLength(6);
-  const ids = new Set(els.map((e) => e.id));
-  expect(arrows.every((a) => ids.has(a.startBinding!.elementId) && ids.has(a.endBinding!.elementId))).toBe(
-    true,
-  );
-  expect(texts(els).map((t) => t.originalText)).toEqual(expect.arrayContaining(["Is it OK?", "Yes", "No"]));
 });

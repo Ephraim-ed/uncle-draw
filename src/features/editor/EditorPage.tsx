@@ -15,6 +15,7 @@ import type {
   BinaryFiles,
   ExcalidrawImperativeAPI,
   ExcalidrawInitialDataState,
+  UIAppState,
   UIOptions,
 } from "@excalidraw/excalidraw/types";
 import {
@@ -59,6 +60,8 @@ import { BoardTitle } from "./BoardTitle";
 import { EMBED_ALLOW_LIST, HAND_DRAWN_DEFAULTS } from "./constants";
 import { loadBoardFiles } from "./editor.api";
 import { RecoveryDialog, RenameDialog } from "./EditorDialogs";
+import { FlowController } from "./flow/FlowController";
+import { FlowOverlay } from "./flow/FlowOverlay";
 import { EditorSession, prefsKey } from "./EditorSession";
 import { SaveStatusPill } from "./SaveStatusPill";
 import { registerFlush } from "./saveRegistry";
@@ -117,7 +120,7 @@ function EditorStatus({ iconOnly }: { iconOnly: boolean }) {
 }
 
 /** renderTopRightUI content (VISUAL_DESIGN.md §6.3): title, status pill, Share, avatar. */
-function EditorTopRight({ isMobile }: { isMobile: boolean }) {
+function EditorTopRight({ isMobile, sidebarOpen }: { isMobile: boolean; sidebarOpen: boolean }) {
   const ui = useContext(EditorUiContext)!;
   const wide = useMediaQuery("(min-width: 1024px)");
   if (isMobile) {
@@ -135,7 +138,8 @@ function EditorTopRight({ isMobile }: { isMobile: boolean }) {
   }
   return (
     <div className="ud-slot ud-topright">
-      {wide ? <BoardTitle title={ui.title} onRename={ui.rename ?? undefined} /> : null}
+      {/* A docked sidebar (library, search) leaves no room for the title next to the toolbar. */}
+      {wide && !sidebarOpen ? <BoardTitle title={ui.title} onRename={ui.rename ?? undefined} /> : null}
       <EditorStatus iconOnly={false} />
       <SketchButton size="sm" icon={<IconShare size={18} stroke={1.75} />} onClick={ui.openShare}>
         Share
@@ -296,6 +300,12 @@ function BoardEditor({ data, onGone }: { data: ReadyBoard; onGone: () => void })
     return tables.attach(api, host);
   }, [api, host, tables]);
   const { editable } = useSyncExternalStore(tables.subscribe, tables.getState);
+  // Flowcharts (EDIT-8): "+" buttons add the next step; swimlanes get a lane bar.
+  const [flows] = useState(() => new FlowController());
+  useEffect(() => {
+    if (!api || !host) return;
+    return flows.attach(api, host);
+  }, [api, host, flows]);
   // Table and flowchart tools sit in Excalidraw's toolbar; the footer has them if it can't be found.
   const toolbar = useToolbarSlot(host);
   const footerTools = toolbar.missing && editable;
@@ -381,7 +391,12 @@ function BoardEditor({ data, onGone }: { data: ReadyBoard; onGone: () => void })
     downloadBlob(new Blob([json], { type: MIME_TYPES.excalidraw }), `${fileNameFor(title)}.excalidraw`);
   }, [api, title]);
 
-  const renderTopRightUI = useCallback((isMobile: boolean) => <EditorTopRight isMobile={isMobile} />, []);
+  const renderTopRightUI = useCallback(
+    (isMobile: boolean, appState: UIAppState) => (
+      <EditorTopRight isMobile={isMobile} sidebarOpen={!!appState.openSidebar} />
+    ),
+    [],
+  );
 
   const ui = useMemo<EditorUi>(
     () => ({
@@ -487,6 +502,7 @@ function BoardEditor({ data, onGone }: { data: ReadyBoard; onGone: () => void })
           {children}
         </Excalidraw>
         <TableBar controller={tables} />
+        <FlowOverlay controller={flows} />
       </div>
       {toolbar.slot
         ? createPortal(<TableToolbarButtons controller={tables} onTemplates={openTemplates} />, toolbar.slot)

@@ -270,7 +270,7 @@ Search, sort and the Trash link arrive in v1.1 (DASH-6, DASH-8). In v1 the heade
 
 - The editor fills the viewport (`100dvh`), with no app header. All chrome comes from Excalidraw plus our slot content.
 - **`renderTopRightUI`** content, left to right:
-  1. **Board title:** Assistant 14/600, click to rename inline. Hidden below 1024 px; renaming is then in the main menu.
+  1. **Board title:** Assistant 14/600, click to rename inline. Hidden below 1024 px and while a sidebar (library, search) is open; renaming is then in the main menu.
   2. **Save-status pill** (§9.1).
   3. **Share** button: secondary, small.
   4. **Avatar** menu.
@@ -288,6 +288,8 @@ Search, sort and the Trash link arrive in v1.1 (DASH-6, DASH-8). In v1 the heade
   - The active cell gets a dashed primary outline. Clicking the bar never takes keyboard focus from the canvas.
 - **Grid-line drags** show a 2 px primary guide with a "240 px" chip. The cursor is `col-resize` or `row-resize` over a line and `pointer` over a checkbox.
 - **Tables** keep the canvas style. Defaults: 1 px borders in black, body cells filled with the canvas color, a light gray (`#e9ecef`) header row, centered text, 22 px checkboxes with rounded corners, and a tick that overshoots the box like a quick pen mark.
+- **"+" step buttons**: 26 px rough primary-blue dots with a white plus. They sit 34 px outside a selected step's sides (50 px above it, clear of the rotate handle).
+- **Lane bar**: the same floating bar as the table bar, by the selected lane's header, with "Add lane above", "Add lane below" and "Delete lane". Floating bars keep right of Excalidraw's style panel (232 px) on desktop.
 - **Flowchart templates dialog** (760 px): a grid of sketch-framed cards. Each has a live preview drawn by Excalidraw on the light thumbnail well (light in both themes, like board thumbnails), a name and a one-line description.
 - **Welcome screen (`<WelcomeScreen>`)** on an empty board:
   - Center: the Uncle Draw wordmark (in place of Excalidraw's logo) and "Start sketching. Uncle Draw saves as you go."

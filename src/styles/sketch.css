@@ -404,10 +404,10 @@
   outline-offset: 2px;
 }
 
-/* ---------- Table bar, active cell, table tool preview (EDIT-7) --------- */
+/* ---------- Floating bars (table, swimlane), active cell, previews ----- */
 
 /* Above the canvas, below Excalidraw's menus and dialogs (like .ud-mobile-status). */
-.ud-tablebar.ud-sketch {
+.ud-floatbar.ud-sketch {
   --ud-sketch-fill: var(--ud-surface);
   --ud-so: 3px;
   position: absolute;
@@ -421,23 +421,23 @@
   color: var(--ud-ink);
   font-family: var(--ud-font-ui);
 }
-.ud-tablebar .ud-iconbtn.ud-sketch {
+.ud-floatbar .ud-iconbtn.ud-sketch {
   width: 34px;
   height: 34px;
 }
-.ud-tablebar .ud-iconbtn.ud-sketch[aria-pressed="true"] {
+.ud-floatbar .ud-iconbtn.ud-sketch[aria-pressed="true"] {
   color: var(--ud-primary);
 }
-.ud-tablebar .ud-iconbtn.ud-sketch[aria-pressed="true"] > .ud-sketch__art {
+.ud-floatbar .ud-iconbtn.ud-sketch[aria-pressed="true"] > .ud-sketch__art {
   opacity: 1;
 }
-.ud-tablebar__divider {
+.ud-floatbar__divider {
   width: 1px;
   height: 22px;
   margin: 0 4px;
   background: color-mix(in srgb, var(--ud-ink) 18%, transparent);
 }
-.ud-tablebar__panel.ud-sketch {
+.ud-floatbar__panel.ud-sketch {
   --ud-sketch-fill: var(--ud-surface);
   --ud-so: 4px;
   position: absolute;
@@ -450,11 +450,11 @@
   max-width: calc(100vw - 16px);
   padding: 14px 16px;
 }
-.ud-tablebar__panel[data-up] {
+.ud-floatbar__panel[data-up] {
   top: auto;
   bottom: calc(100% + 10px);
 }
-.ud-tablebar__sizes {
+.ud-floatbar__sizes {
   display: flex;
   flex-wrap: wrap;
   gap: 16px;
@@ -521,6 +521,39 @@
   line-height: 20px;
   font-weight: 600;
   white-space: nowrap;
+}
+
+/* "+" buttons around a selected flowchart step (EDIT-8): a rough blue dot. */
+.ud-flow-add.ud-sketch {
+  --ud-sketch-fill: var(--ud-primary);
+  position: absolute;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  margin: -13px 0 0 -13px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--ud-on-primary);
+  cursor: pointer;
+  opacity: 0.85;
+  transition:
+    transform 80ms ease-out,
+    opacity 80ms ease-out;
+}
+.ud-flow-add.ud-sketch:hover,
+.ud-flow-add.ud-sketch:focus-visible {
+  --ud-sketch-fill: var(--ud-primary-hover);
+  opacity: 1;
+  transform: scale(1.15);
+}
+.ud-flow-add.ud-sketch:focus-visible {
+  outline: 2px solid var(--ud-primary);
+  outline-offset: 3px;
 }
 
 /* The line that follows a grid-line drag; the table resizes on release. */
