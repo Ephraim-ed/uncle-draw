@@ -57,6 +57,26 @@ export const COLLAB_CHUNK_BYTES = 100_000;
 /** No pointer or keyboard activity for this long shows a collaborator as idle. */
 export const COLLAB_IDLE_MS = 60_000;
 
+/**
+ * Voice chat (COLLAB-5) is a peer-to-peer mesh: everyone sends their audio to
+ * everyone else, so the call is capped to keep each person's upload small.
+ */
+export const VOICE_MAX_PEOPLE = 8;
+/** Screen sharing (COLLAB-7) sends one video per viewer, so it's capped too. */
+export const SCREEN_MAX_VIEWERS = 8;
+/** WebRTC connections: how long to wait for ICE candidates before sending an offer or answer anyway. */
+export const PEER_GATHER_MS = 2500;
+/** A connection that isn't up by then is started over (by whoever offered it). */
+export const PEER_CONNECT_TIMEOUT_MS = 15_000;
+export const PEER_RETRY_MIN_MS = 2000;
+export const PEER_RETRY_MAX_MS = 30_000;
+/** An offer can arrive before presence says its sender is in the call or sharing. */
+export const PEER_PRESENCE_GRACE_MS = 5000;
+/** Speaking: loudness (RMS, 0–1) above this level, polled this often, held this long. */
+export const VOICE_SPEAKING_LEVEL = 0.03;
+export const VOICE_METER_MS = 100;
+export const VOICE_SPEAKING_HOLD_MS = 400;
+
 /** Local writes are throttled so freehand drawing stays within budget (tech §10). */
 export const LOCAL_WRITE_THROTTLE_MS = 250;
 export const VIEWPORT_WRITE_THROTTLE_MS = 500;

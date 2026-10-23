@@ -7,7 +7,7 @@ import { appStateSubsetSchema, elementSchema } from "../../../lib/schemas";
  * elements then go through restoreElements() like any other scene data.
  */
 
-export const COLLAB_EVENTS = ["tick", "hello", "saved", "files", "follow"] as const;
+export const COLLAB_EVENTS = ["tick", "hello", "saved", "files", "follow", "rtc", "comments"] as const;
 export type CollabEvent = (typeof COLLAB_EVENTS)[number];
 
 /** Presence (one entry per open editor tab, keyed by session id). */
@@ -17,6 +17,12 @@ export const presenceSchema = z.object({
   name: z.string().max(80),
   avatarUrl: z.string().max(2048).nullable().optional(),
   state: z.enum(["active", "idle", "away"]).default("active"),
+  /** In the voice chat, and whether muted (COLLAB-5). Older clients leave it out. */
+  voice: z.enum(["off", "on", "muted"]).default("off"),
+  /** When this tab started presenting (COLLAB-6); the earliest presenter wins. */
+  presenting: z.number().int().positive().nullable().default(null),
+  /** When this tab started sharing its screen (COLLAB-7); the earliest sharer wins. */
+  sharing: z.number().int().positive().nullable().default(null),
 });
 export type PresenceMeta = z.infer<typeof presenceSchema>;
 
@@ -54,8 +60,27 @@ export const savedSchema = z.object({ s: sessionId, version: z.number().int(), f
 /** These image files are now uploaded and can be fetched. */
 export const filesSchema = z.object({ s: sessionId, ids: z.array(z.string().max(128)).max(500) });
 
+/** I changed the board's comments (CMT-1): reload them. */
+export const commentsSchema = z.object({ s: sessionId });
+
 /** I started (on) or stopped following `target` (COLLAB-4). */
 export const followSchema = z.object({ s: sessionId, target: sessionId, on: z.boolean() });
+
+/**
+ * WebRTC signaling for voice chat and screen sharing (COLLAB-5/7): an offer
+ * or answer for `to`, with every ICE candidate already in its SDP. `m` says
+ * which connections it's for; `id` names one connection attempt, and
+ * messages for an older attempt are ignored.
+ */
+export const rtcSchema = z.object({
+  s: sessionId,
+  to: sessionId,
+  m: z.enum(["voice", "screen"]),
+  id: z.string().min(1).max(64),
+  kind: z.enum(["offer", "answer"]),
+  sdp: z.string().min(1).max(32_000),
+});
+export type RtcPayload = z.infer<typeof rtcSchema>;
 
 /**
  * Splits elements into batches whose JSON stays under `maxBytes`, so each

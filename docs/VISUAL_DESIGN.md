@@ -210,7 +210,7 @@ The wireframes below show layout only. Every border in the real UI is a Rough.js
 ```
 
 - The card is at most 400 px wide and centered.
-- Primary button: "Send me a magic link". Secondary button: "Continue with GitHub".
+- By default the card holds just "Continue with GitHub" (AUTH-1 is hidden unless `VITE_EMAIL_SIGN_IN=true`). With email on, as drawn: primary button "Send me a magic link", secondary button "Continue with GitHub".
 - After the link is sent, the card switches to the "Check your inbox" state with an envelope doodle and a "Use a different email" link.
 
 ### 6.2 Dashboard (`/boards`)
@@ -282,6 +282,18 @@ Search, sort and the Trash link arrive in v1.1 (DASH-6, DASH-8). In v1 the heade
   - **Table** (▦, shortcut **B**) is a tool: it highlights like the others, and a drag on the canvas shows a dashed primary-blue grid preview with a "3 rows × 2 columns" chip.
   - **Templates** (⑂) opens the picker. It's hidden on phones, where the main menu has it.
 - **Footer (`<Footer>`)**: only if the toolbar slot can't be found, secondary small **Table** and **Templates** buttons appear next to undo/redo.
+- **Live bar** (COLLAB-5…7): once someone else is on the board, a sketch-framed bar sits at the right of the footer, by the help button (clear of the follow badge and toasts in the middle). Ghost buttons with icons, split by dividers:
+  - Voice: **Join voice** (a green count of people already talking), then **Mute** / **Leave** icon buttons once in. Muted and Leave are `--ud-danger`.
+  - **Present** / **Stop presenting** with "2 following"; a follower sees "Pat is presenting", or **Follow Pat** after looking around.
+  - **Share screen** (only where the browser can) / **Stop sharing** with "1 watching".
+  - Pressed buttons (presenting, sharing) get the `--ud-primary-soft` fill and primary text, and the bar's frame turns primary while I present or share.
+  - Phones: icon buttons only, floating under the toolbar to the right of the status pill.
+- **Comments** (CMT-1):
+  - Toolbar, after Templates: the **Comment** tool (speech bubble with a plus, shortcut **C**) and **Hide comments** (a toggle like Excalidraw's lock, pressed while hidden). Phones get "Hide comments" / "Show comments" in the main menu instead.
+  - Markers: 30 px rough circles in sticky-note yellow (`--ud-highlight`) with the starter's initial in Excalifont and a primary count badge once there are replies. The bubble's bottom-left sits on the spot, or just off a shape's top-right corner. An open thread's marker turns `--ud-primary-soft`. Markers stay under Excalidraw's own UI.
+  - The thread card (320 px, sketch frame) sits right of its marker (left of it near the edge), clear of the toolbar and footer. Header: "Comment" with Resolve, Delete thread (asks first, inline) and Close. Each comment shows a 26 px avatar, the name, "5 min ago" and the text; a small trash icon deletes a reply. A reply box at the bottom: Enter sends, Shift+Enter starts a new line.
+  - A new comment shows a primary dot where it goes and the same card with "Add a comment…", Cancel and Comment.
+- **Shared screen panel** (COLLAB-7): a sketch-framed panel (420 px) above the live bar with "Pat's screen" and **Make bigger** / **Hide** icon buttons; the picture letterboxes on `--ud-surface-sunken`. Bigger fills the canvas between the toolbar and the footer; Hide leaves just the title bar. It sits over Excalidraw's hints and welcome screen, and steps behind while one of its menus or sidebars is open. Phones: full width above the bottom bar.
 - **Table bar**: a sketch-framed bar (surface fill, paper-cut shadow) floats 12 px above a selected table, or below it when there's no room, clear of the toolbar and footer.
   - Ghost icon buttons (34 px, Tabler 18 px) in groups: rows, columns, header/checkbox toggles (pressed = primary), alignment, then style and delete.
   - The style panel opens under it, with color chips (Excalidraw's quick picks, a dashed "Canvas color" chip, a rainbow custom picker), border widths, and px fields for the active column and row.

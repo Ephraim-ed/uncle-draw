@@ -400,6 +400,8 @@ The `renderTopRightUI` pill shows one of these states:
 | `VITE_SUPABASE_ANON_KEY` | Client | Anon (publishable) key |
 | `SUPABASE_SERVICE_ROLE_KEY` | Edge Function secrets only | Share and account-deletion functions |
 | `SUPABASE_AUTH_GITHUB_CLIENT_ID` / `_SECRET` | `supabase/config.toml` (local) and dashboard (prod) | GitHub OAuth |
+| `VITE_EMAIL_SIGN_IN` | Client (optional) | `true` shows magic-link sign-in (AUTH-1) next to GitHub. Off by default; local Supabase and E2E turn it on |
+| `VITE_ICE_SERVERS` | Client (optional) | STUN/TURN servers for voice and screen sharing, as a JSON array of `RTCIceServer`. Defaults to public STUN |
 
 Environments:
 - **Local:** `supabase start` runs Postgres, Auth, Storage, Mailpit and Functions in Docker. `npm run dev` serves the app at `http://localhost:5173`.
@@ -470,7 +472,7 @@ CI (GitHub Actions) on every PR:
 
 ## 15. v2: multiplayer
 
-Built (COLLAB-1…4). v1's choices carried over as planned; where the build differs from the original plan, this section says so.
+Built (COLLAB-1…7). v1's choices carried over as planned; where the build differs from the original plan, this section says so.
 
 - **Access (COLLAB-1, built as an edit link):**
   - `board_members (board_id, user_id, role)` holds editors. Rows are only created by `join_board(token)`, which validates an active `board_edit_links` token on a board that isn't trashed. A board can have up to 50 editors.
@@ -481,6 +483,7 @@ Built (COLLAB-1…4). v1's choices carried over as planned; where the build diff
   - **`tick`** messages, at most one per 80 ms, carry everything that changed: elements (version-tracked, so nothing echoes back), pointer, selection, board settings (background, grid), and the visible area for followers. Nothing is sent while you're alone on the board.
   - **`hello`**: a newcomer, or someone reconnecting, asks for everyone's scene. Peers answer with their whole scene, split into chunks under the payload limit.
   - **`saved`**, **`files`** and **`follow`** announce a save, a finished image upload, and follow mode.
+  - **`rtc`** carries WebRTC signaling for voice and screen sharing (`m: "voice" | "screen"`): an offer or answer addressed to one tab, with every ICE candidate already in its SDP, so a connection takes one message each way. `id` names one attempt; messages for older attempts are ignored.
   - Every message is checked with Zod, and elements go through `restoreElements()` before `reconcileElements()`. Remote changes are applied with `CaptureUpdateAction.NEVER`, so undo only affects my own changes.
 - **Presence** feeds Excalidraw's `collaborators` map: name, avatar, color (from the user id), pointer, selected ids, and active/idle/away (60 s idle, hidden tab = away). Excalidraw's own UI shows the avatars top-right and the named cursors. Clicking an avatar follows that person: they send their visible bounds while followed, and the follower applies them with `zoomToFitBounds`.
 - **Persistence (changed from the plan):** there's no elected "saver". Every editor saves its own changes through `save_board`.
@@ -489,8 +492,21 @@ Built (COLLAB-1…4). v1's choices carried over as planned; where the build diff
   - Changes that arrived from collaborators are saved by their author. Others save them only as a fallback after 15 s.
   - Fingerprints are independent of element order, so two clients holding the same scene always agree.
   - This replaces v1's SAVE-4 dialog, and it also covers tabs that can't reach Realtime.
+- **Voice chat (COLLAB-5):** a peer-to-peer WebRTC audio mesh (`VoiceChat`, connections in `PeerLinks`). Presence carries `voice: "off" | "on" | "muted"`, and Excalidraw's collaborator badges (`isInCall`, `isMuted`, `isSpeaking`) show it on avatars and cursors.
+  - Each pair has one connection; the tab whose session id sorts first offers, so offers never cross. A connection that fails or isn't up after 15 s is started over by its offerer, backing off from 2 s to 30 s.
+  - An offer can beat its sender's presence update, so connections to tabs presence doesn't list yet get 5 s before they're dropped.
+  - Speaking is measured locally: the RTP audio level of each incoming stream (Web Audio as a fallback, and for my own microphone). It costs no messages.
+  - A Realtime disconnect doesn't end calls: connections are peer to peer, and presence catches up on reconnect. Capped at 8 people (`VOICE_MAX_PEOPLE`).
+- **Presenter mode (COLLAB-6):** presence carries `presenting` (when it started). The earliest presenter wins a tie, and the other one stops with a notice. Everyone else follows the presenter through follow mode (newcomers too), set in the same update that adds the presenter to Excalidraw's collaborators so Excalidraw doesn't drop it. The presenter sends visible bounds whenever their view moves, followed or not. Panning stops following; followers re-fit the last bounds when their own window resizes.
+- **Screen sharing (COLLAB-7):** presence carries `sharing` (when it started; the earliest wins). The sharer captures with `getDisplayMedia` (video only, `contentHint: "detail"`) and offers one-way video to each viewer, who only answers. Viewers are the first 8 other tabs by session id (`SCREEN_MAX_VIEWERS`), so the sharer and every viewer agree on who's in; anyone else is told it's full. The browser's own "Stop sharing" ends it too.
 - **Tombstones:** saves keep deleted elements (`isDeleted: true`) for 24 h, then prune them, so a stale peer's copy can't bring a deletion back. The local backup keeps them too. The read-only share page drops them.
 - **Known limit:** reconcile picks the higher element version. If two offline tabs create elements whose fractional indices collide, Excalidraw re-indexes one of them on merge, which bumps its version. A concurrent delete of that same element can then lose the tie.
+- **Comments (CMT-1):** `comment_threads (board_id, element_id, x, y, created_by, resolved_at, resolved_by)` and `comments (thread_id, board_id, author_id, body)`; a reply's `(thread_id, board_id)` references its thread, so it can't land on another board.
+  - RLS: the owner and editors (`can_edit_board`) read, start threads and reply, in their own name only. Anyone on the board resolves or reopens (the only columns anyone may update); comments aren't edited. Authors delete their comments, starters their threads, and the owner anything.
+  - `start_comment_thread()` writes a thread and its first comment in one transaction. `board_comments()` (security definer, like `board_people`) returns every comment with its thread and its author's name and avatar.
+  - A thread on a shape follows the shape's top-right corner while it exists, and falls back to its stored spot. Markers are DOM overlays, so they never end up in exports or thumbnails.
+  - After any change, the editor broadcasts **`comments`** on the board channel and collaborators reload (debounced); window focus reloads too. View-only share links don't show comments.
+- **Known limits (COLLAB-5…7):** without a TURN server (`VITE_ICE_SERVERS`), peers behind symmetric NATs or strict firewalls can't connect. Signaling trusts board editors the way presence does: an editor could claim another tab's session id. Screen sharing doesn't carry tab audio.
 - **Not built yet:** a Viewer role for members, email invites, and version history (HIST-1: `board_snapshots (board_id, version, scene, created_at)`, filled at most every 10 min while editing).
 
 ---

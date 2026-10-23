@@ -2,8 +2,9 @@ import { CaptureUpdateAction, convertToExcalidrawElements, newElementWith } from
 import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
 import type { AppState, Collaborator, SceneData, SocketId } from "@excalidraw/excalidraw/types";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { fakeScreenMedia, fakeVoiceMedia } from "../../../test/fakeVoice";
 import { appStateKey, restoreScene } from "../serialize";
-import { CollabSession, type CollabApi } from "./CollabSession";
+import { CollabSession, type CollabApi, type LiveState } from "./CollabSession";
 import { chunkElements, type CollabEvent, type PresenceMeta } from "./protocol";
 import type { TransportHandlers } from "./transport";
 
@@ -49,6 +50,7 @@ function fakeApi(elements: ExcalidrawElement[]) {
           userToFollow: { socketId: SocketId; username: string };
           action: "FOLLOW" | "UNFOLLOW";
         }) => void),
+    scrollCb: null as null | (() => void),
   };
   const api: CollabApi = {
     getSceneElementsIncludingDeleted: () => state.elements as never,
@@ -64,12 +66,15 @@ function fakeApi(elements: ExcalidrawElement[]) {
       state.followCb = cb;
       return () => undefined;
     }) as unknown as CollabApi["onUserFollow"],
-    onScrollChange: (() => () => undefined) as unknown as CollabApi["onScrollChange"],
+    onScrollChange: ((cb: () => void) => {
+      state.scrollCb = cb;
+      return () => undefined;
+    }) as unknown as CollabApi["onScrollChange"],
   };
   return { api, state };
 }
 
-function setup(opts: { chunkBytes?: number } = {}) {
+function setup(opts: { chunkBytes?: number; onCommentsChanged?: () => void } = {}) {
   const elements = scene();
   const { api, state } = fakeApi(elements);
   const sent: Array<{ event: CollabEvent; payload: Record<string, unknown> }> = [];
@@ -78,6 +83,10 @@ function setup(opts: { chunkBytes?: number } = {}) {
   const onRemoteSaved = vi.fn();
   const onFilesNeeded = vi.fn();
   const onPeersChange = vi.fn();
+  const onLiveChange = vi.fn();
+  const notify = vi.fn();
+  const voice = fakeVoiceMedia();
+  const screen = fakeScreenMedia();
   const session = new CollabSession({
     sessionId: ME,
     identity: { userId: "u-me", name: "Me", avatarUrl: null },
@@ -95,16 +104,32 @@ function setup(opts: { chunkBytes?: number } = {}) {
     onFilesNeeded,
     onPeersChange,
     chunkBytes: opts.chunkBytes,
+    onCommentsChanged: opts.onCommentsChanged,
     scheduleFrame: (cb) => cb(),
+    voiceMedia: voice.media,
+    screenMedia: screen.media,
+    onLiveChange,
+    notify,
   });
   session.start(api);
-  const me: PresenceMeta = { sessionId: ME, userId: "u-me", name: "Me", state: "active" };
+  const me: PresenceMeta = {
+    sessionId: ME,
+    userId: "u-me",
+    name: "Me",
+    state: "active",
+    voice: "off",
+    presenting: null,
+    sharing: null,
+  };
   const peer: PresenceMeta = {
     sessionId: PEER,
     userId: "u-peer",
     name: "Pat",
     avatarUrl: null,
     state: "active",
+    voice: "off",
+    presenting: null,
+    sharing: null,
   };
   const connect = (withPeer = true) => {
     handlers.onStatus(true);
@@ -125,6 +150,11 @@ function setup(opts: { chunkBytes?: number } = {}) {
     onRemoteSaved,
     onFilesNeeded,
     onPeersChange,
+    onLiveChange,
+    notify,
+    voice,
+    screen,
+    live: () => onLiveChange.mock.lastCall?.[0] as LiveState | undefined,
   };
 }
 
@@ -275,8 +305,26 @@ describe("CollabSession (COLLAB-2…4, tech §15)", () => {
     t.handlers().onMessage("tick", { s: PEER, v: [1000, 1000, 1500, 1400] });
     expect(t.state.appState.scrollX).not.toBe(0);
 
+    // My window resizes: their view is fitted again.
+    t.state.appState = { ...t.state.appState, width: 390, height: 844 };
+    const zoomBefore = t.state.appState.zoom.value;
+    t.session.handleResize();
+    expect(t.state.appState.zoom.value).toBeLessThan(zoomBefore);
+
     t.handlers().onPresence([t.me]);
     expect((t.state.appState.followedBy as Set<string>).size).toBe(0);
+  });
+
+  it("passes comment changes on, both ways (CMT-1)", () => {
+    const onCommentsChanged = vi.fn();
+    const t = setup({ onCommentsChanged });
+    t.connect();
+    t.session.announceComments();
+    expect(t.sent.at(-1)).toEqual({ event: "comments", payload: { s: ME } });
+    t.handlers().onMessage("comments", { s: PEER });
+    t.handlers().onMessage("comments", { s: ME });
+    t.handlers().onMessage("comments", { nope: 1 });
+    expect(onCommentsChanged).toHaveBeenCalledTimes(1);
   });
 
   it("ignores malformed or own messages", () => {
@@ -301,6 +349,272 @@ describe("CollabSession (COLLAB-2…4, tech §15)", () => {
     t.handlers().onPresence([t.me, t.peer]);
     const ids = t.ticks().flatMap((m) => (m.payload.e as ExcalidrawElement[]).map((e) => e.id));
     expect(ids.sort()).toEqual(t.state.elements.map((e) => e.id).sort());
+  });
+});
+
+describe("CollabSession voice chat (COLLAB-5)", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it("puts my call status in presence and on everyone's avatars", async () => {
+    const t = setup();
+    t.connect();
+    await t.session.joinVoice();
+    expect(t.tracked.at(-1)).toMatchObject({ voice: "on" });
+    expect(t.state.collaborators.get(ME as SocketId)).toMatchObject({ isInCall: true, isMuted: false });
+    expect(t.live()).toMatchObject({ voice: "on", muted: false, inCall: 0 });
+
+    t.session.setMuted(true);
+    expect(t.tracked.at(-1)).toMatchObject({ voice: "muted" });
+    expect(t.state.collaborators.get(ME as SocketId)).toMatchObject({ isMuted: true });
+
+    t.handlers().onPresence([t.me, { ...t.peer, voice: "muted" }]);
+    expect(t.state.collaborators.get(PEER as SocketId)).toMatchObject({ isInCall: true, isMuted: true });
+    expect(t.live()).toMatchObject({ inCall: 1 });
+
+    t.session.leaveVoice();
+    expect(t.tracked.at(-1)).toMatchObject({ voice: "off" });
+    expect(t.voice.mic.tracks[0]!.stopped).toBe(true);
+  });
+
+  it("signals over the board channel, one tab to another", async () => {
+    const t = setup();
+    t.connect();
+    await t.session.joinVoice();
+    // "session-me" sorts before "session-peer", so I offer.
+    t.handlers().onPresence([t.me, { ...t.peer, voice: "on" }]);
+    await vi.advanceTimersByTimeAsync(20);
+    const offer = t.sent.find((m) => m.event === "rtc")!.payload;
+    expect(offer).toMatchObject({ s: ME, to: PEER, kind: "offer" });
+
+    t.handlers().onMessage("rtc", {
+      s: PEER,
+      to: ME,
+      m: "voice",
+      id: offer.id,
+      kind: "answer",
+      sdp: "v=0 answer",
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(t.voice.pcs[0]!.remoteDescription).toEqual({ type: "answer", sdp: "v=0 answer" });
+  });
+
+  it("keeps the call going through a channel blip", async () => {
+    const t = setup();
+    t.connect();
+    await t.session.joinVoice();
+    t.handlers().onPresence([t.me, { ...t.peer, voice: "on" }]);
+    await vi.advanceTimersByTimeAsync(10_000);
+    t.handlers().onStatus(false);
+    expect(t.voice.pcs[0]!.closed).toBe(false);
+  });
+
+  it("leaves the call when the editor closes", async () => {
+    const t = setup();
+    t.connect();
+    await t.session.joinVoice();
+    await t.session.dispose();
+    expect(t.voice.mic.tracks[0]!.stopped).toBe(true);
+  });
+});
+
+describe("CollabSession presenter mode (COLLAB-6)", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  const following = (t: ReturnType<typeof setup>) => t.state.appState.userToFollow?.socketId;
+  /** What Excalidraw does when userToFollow changes. */
+  const excalidrawFollows = (t: ReturnType<typeof setup>, on: boolean) =>
+    t.state.followCb?.({
+      userToFollow: { socketId: PEER as SocketId, username: "Pat" },
+      action: on ? "FOLLOW" : "UNFOLLOW",
+    });
+
+  it("presenting goes in presence, and my view goes out as I move, followed or not", async () => {
+    const t = setup();
+    t.connect();
+    t.session.startPresenting();
+    expect(t.tracked.at(-1)!.presenting).toEqual(expect.any(Number));
+    expect(t.live()).toMatchObject({ presenter: { sessionId: ME, isMe: true } });
+    expect(t.ticks().at(-1)?.payload.v).toHaveLength(4);
+
+    t.sent.length = 0;
+    t.state.scrollCb?.();
+    await vi.advanceTimersByTimeAsync(100);
+    expect(t.ticks().at(-1)?.payload.v).toHaveLength(4);
+
+    t.handlers().onMessage("follow", { s: PEER, target: ME, on: true });
+    expect(t.live()).toMatchObject({ followers: 1 });
+
+    t.session.stopPresenting();
+    expect(t.tracked.at(-1)!.presenting).toBeNull();
+    expect(t.live()?.presenter).toBeNull();
+    t.sent.length = 0;
+    t.handlers().onMessage("follow", { s: PEER, target: ME, on: false });
+    t.state.scrollCb?.();
+    await vi.advanceTimersByTimeAsync(100);
+    expect(t.ticks()).toHaveLength(0);
+  });
+
+  it("everyone follows the presenter, and stops when they finish", () => {
+    const t = setup();
+    t.connect();
+    t.handlers().onPresence([t.me, { ...t.peer, presenting: 1000 }]);
+    // Followed in the same update that adds Pat, so Excalidraw knows who that is.
+    const update = t.state.updates.find((u) => u.appState?.userToFollow);
+    expect(update?.collaborators?.has(PEER as SocketId)).toBe(true);
+    expect(following(t)).toBe(PEER);
+    expect(t.notify).toHaveBeenCalledWith("Pat is presenting. You're following their view.");
+
+    excalidrawFollows(t, true);
+    expect(t.sent.at(-1)).toEqual({ event: "follow", payload: { s: ME, target: PEER, on: true } });
+    expect(t.live()).toMatchObject({
+      presenter: { sessionId: PEER, name: "Pat", isMe: false },
+      following: true,
+    });
+
+    t.handlers().onPresence([t.me, t.peer]);
+    expect(following(t)).toBeUndefined();
+    expect(t.notify).toHaveBeenLastCalledWith("Pat stopped presenting.");
+    expect(t.live()?.presenter).toBeNull();
+  });
+
+  it("follows the presenter again after looking around", () => {
+    const t = setup();
+    t.connect();
+    t.handlers().onPresence([t.me, { ...t.peer, presenting: 1000 }]);
+    excalidrawFollows(t, true);
+    // Panning away: Excalidraw stops following.
+    t.state.appState = { ...t.state.appState, userToFollow: null };
+    excalidrawFollows(t, false);
+    expect(t.live()).toMatchObject({ following: false });
+
+    t.session.followPresenter();
+    expect(following(t)).toBe(PEER);
+  });
+
+  it("only one presents: I can't start over someone, and the earlier start wins a tie", () => {
+    const t = setup();
+    t.connect();
+    t.handlers().onPresence([t.me, { ...t.peer, presenting: 1000 }]);
+    t.session.startPresenting();
+    expect(t.tracked.at(-1)!.presenting).toBeNull();
+
+    const u = setup();
+    u.connect();
+    u.session.startPresenting();
+    // Pat pressed Present a moment before me.
+    u.handlers().onPresence([u.me, { ...u.peer, presenting: Date.now() - 50 }]);
+    expect(u.tracked.at(-1)!.presenting).toBeNull();
+    expect(u.notify).toHaveBeenCalledTimes(1);
+    expect(u.notify).toHaveBeenCalledWith("Pat is already presenting.");
+    expect(u.state.appState.userToFollow?.socketId).toBe(PEER);
+  });
+
+  it("a channel blip doesn't end the presentation for followers", () => {
+    const t = setup();
+    t.connect();
+    t.handlers().onPresence([t.me, { ...t.peer, presenting: 1000 }]);
+    excalidrawFollows(t, true);
+    t.handlers().onStatus(false);
+    // Excalidraw drops the follow when Pat disappears from the collaborators.
+    t.state.appState = { ...t.state.appState, userToFollow: null };
+    excalidrawFollows(t, false);
+    expect(t.notify).toHaveBeenCalledTimes(1);
+
+    t.handlers().onStatus(true);
+    t.handlers().onPresence([t.me, { ...t.peer, presenting: 1000 }]);
+    expect(following(t)).toBe(PEER);
+    expect(t.notify).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("CollabSession screen sharing (COLLAB-7)", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  const viewer = (n: number): PresenceMeta => ({
+    sessionId: `session-v${String(n).padStart(2, "0")}`,
+    userId: `u-${n}`,
+    name: `Viewer ${n}`,
+    state: "active",
+    voice: "off",
+    presenting: null,
+    sharing: null,
+  });
+
+  it("sharing goes in presence, and my screen goes to everyone here", async () => {
+    const t = setup();
+    t.connect();
+    await t.session.startScreenShare();
+    expect(t.tracked.at(-1)!.sharing).toEqual(expect.any(Number));
+    expect(t.live()).toMatchObject({ screen: "sharing", sharer: { sessionId: ME, isMe: true } });
+    await vi.advanceTimersByTimeAsync(20);
+    const offer = t.sent.find((m) => m.event === "rtc")!.payload;
+    expect(offer).toMatchObject({ s: ME, to: PEER, m: "screen", kind: "offer" });
+
+    t.session.stopScreenShare();
+    expect(t.tracked.at(-1)!.sharing).toBeNull();
+    expect(t.live()).toMatchObject({ screen: "off", sharer: null });
+  });
+
+  it("caps how many watch: the first tabs by session id", async () => {
+    const t = setup();
+    t.connect();
+    const crowd = Array.from({ length: 10 }, (_, i) => viewer(i));
+    t.handlers().onPresence([t.me, ...crowd]);
+    await t.session.startScreenShare();
+    await vi.advanceTimersByTimeAsync(20);
+    const offeredTo = t.sent.filter((m) => m.event === "rtc").map((m) => m.payload.to);
+    expect(offeredTo).toEqual(crowd.slice(0, 8).map((p) => p.sessionId));
+  });
+
+  it("watches whoever shares, routing their signaling to the screen", async () => {
+    const t = setup();
+    t.connect();
+    t.handlers().onPresence([t.me, { ...t.peer, sharing: 1000 }]);
+    expect(t.live()).toMatchObject({
+      sharer: { sessionId: PEER, name: "Pat", isMe: false },
+      screenFull: false,
+    });
+
+    t.handlers().onMessage("rtc", { s: PEER, to: ME, m: "screen", id: "s1", kind: "offer", sdp: "v=0" });
+    await vi.advanceTimersByTimeAsync(20);
+    expect(t.screen.pcs).toHaveLength(1);
+    expect(t.voice.pcs).toHaveLength(0);
+    expect(t.sent.at(-1)).toMatchObject({ event: "rtc", payload: { m: "screen", kind: "answer", to: PEER } });
+
+    const stream = { getTracks: () => [] };
+    t.screen.pcs[0]!.dispatchEvent(
+      Object.assign(new Event("track"), { streams: [stream], track: { kind: "video" } }),
+    );
+    expect(t.live()?.screenStream).toBe(stream);
+
+    t.handlers().onPresence([t.me, t.peer]);
+    expect(t.live()).toMatchObject({ sharer: null, screenStream: null });
+  });
+
+  it("says when there's no room to watch", () => {
+    const t = setup();
+    t.connect();
+    // Eight tabs sort before mine ("session-me").
+    const crowd = Array.from({ length: 8 }, (_, i) => viewer(i)).map((p) => ({
+      ...p,
+      sessionId: `session-a${p.sessionId}`,
+    }));
+    t.handlers().onPresence([t.me, { ...t.peer, sharing: 1000 }, ...crowd]);
+    expect(t.live()).toMatchObject({ sharer: { sessionId: PEER }, screenFull: true });
+  });
+
+  it("only one shares: the earlier start wins a tie", async () => {
+    const t = setup();
+    t.connect();
+    await t.session.startScreenShare();
+    t.handlers().onPresence([t.me, { ...t.peer, sharing: Date.now() - 50 }]);
+    expect(t.tracked.at(-1)!.sharing).toBeNull();
+    expect(t.screen.display.tracks[0]!.stopped).toBe(true);
+    expect(t.notify).toHaveBeenCalledWith("Pat is already sharing their screen.");
+    expect(t.live()).toMatchObject({ screen: "off", sharer: { sessionId: PEER } });
   });
 });
 

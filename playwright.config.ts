@@ -33,6 +33,8 @@ export default defineConfig({
     env: {
       VITE_SUPABASE_URL: process.env.VITE_SUPABASE_URL ?? process.env.API_URL ?? "http://127.0.0.1:54321",
       VITE_SUPABASE_ANON_KEY: process.env.VITE_SUPABASE_ANON_KEY ?? process.env.ANON_KEY ?? "",
+      // The tests sign in with magic links (local GitHub sign-in is off).
+      VITE_EMAIL_SIGN_IN: "true",
     },
   },
 });

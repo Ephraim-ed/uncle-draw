@@ -5,6 +5,7 @@ import { EnvelopeDoodle, PencilHandoffDoodle } from "../../assets/illustrations"
 import { Wordmark } from "../../brand/Wordmark";
 import { SketchBox, SketchButton, SketchInput, hashSeed } from "../../components/sketch";
 import { Splash } from "../../components/ui/Splash";
+import { env } from "../../lib/env";
 import { safeNext } from "../../lib/safeNext";
 import { supabase } from "../../lib/supabase";
 import { useDocumentTitle } from "../../lib/useDocumentTitle";
@@ -17,7 +18,10 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 type Mode = "form" | "sent";
 
-/** /login: magic link + GitHub (AUTH-1, AUTH-2; VISUAL_DESIGN.md §6.1). */
+/**
+ * /login: GitHub (AUTH-2), plus a magic link (AUTH-1) where VITE_EMAIL_SIGN_IN
+ * turns it on (VISUAL_DESIGN.md §6.1).
+ */
 export function LoginPage() {
   useDocumentTitle("Sign in");
   const { session, loading, signingOut } = useAuth();
@@ -139,47 +143,59 @@ export function LoginPage() {
               {linkError ? (
                 <div className="flex flex-col gap-3 bg-danger-soft p-3 text-ink" role="alert">
                   <p>That sign-in link has expired or was already used.</p>
-                  <SketchButton
-                    size="sm"
-                    onClick={() => {
-                      const address = email.trim();
-                      if (address) void sendLink(address);
-                      else emailRef.current?.focus();
-                    }}
-                  >
-                    Send me a new link
-                  </SketchButton>
+                  {env.emailSignIn ? (
+                    <SketchButton
+                      size="sm"
+                      onClick={() => {
+                        const address = email.trim();
+                        if (address) void sendLink(address);
+                        else emailRef.current?.focus();
+                      }}
+                    >
+                      Send me a new link
+                    </SketchButton>
+                  ) : null}
                 </div>
               ) : null}
-              <form onSubmit={onSubmit} className="flex flex-col gap-5" noValidate>
-                <SketchInput
-                  ref={emailRef}
-                  label="Email"
-                  type="email"
-                  name="email"
-                  autoComplete="email"
-                  inputMode="email"
-                  placeholder="you@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  error={error ?? undefined}
-                  required
-                />
-                <SketchButton type="submit" variant="primary" disabled={sending}>
-                  {sending ? "Sending…" : "Send me a magic link"}
-                </SketchButton>
-              </form>
-              <div className="flex items-center gap-3 text-label text-ink-muted" aria-hidden="true">
-                <span className="h-px flex-1 bg-ink-faint" />
-                or
-                <span className="h-px flex-1 bg-ink-faint" />
-              </div>
+              {env.emailSignIn ? (
+                <>
+                  <form onSubmit={onSubmit} className="flex flex-col gap-5" noValidate>
+                    <SketchInput
+                      ref={emailRef}
+                      label="Email"
+                      type="email"
+                      name="email"
+                      autoComplete="email"
+                      inputMode="email"
+                      placeholder="you@example.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      error={error ?? undefined}
+                      required
+                    />
+                    <SketchButton type="submit" variant="primary" disabled={sending}>
+                      {sending ? "Sending…" : "Send me a magic link"}
+                    </SketchButton>
+                  </form>
+                  <div className="flex items-center gap-3 text-label text-ink-muted" aria-hidden="true">
+                    <span className="h-px flex-1 bg-ink-faint" />
+                    or
+                    <span className="h-px flex-1 bg-ink-faint" />
+                  </div>
+                </>
+              ) : null}
               <SketchButton
                 icon={<IconBrandGithub size={20} stroke={1.75} />}
                 onClick={() => void signInWithGitHub()}
               >
                 Continue with GitHub
               </SketchButton>
+              {/* The email field shows errors when it's there; otherwise they go here. */}
+              {!env.emailSignIn && error ? (
+                <p className="text-label text-danger" role="alert">
+                  {error}
+                </p>
+              ) : null}
             </div>
           )}
         </SketchBox>

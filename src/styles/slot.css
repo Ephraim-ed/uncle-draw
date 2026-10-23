@@ -39,3 +39,10 @@
   text-underline-offset: 3px;
   pointer-events: auto;
 }
+
+/* The footer slot spans Excalidraw's footer (live bar on the right), so the
+   gaps in it must let clicks through to the canvas. Excalidraw gives every
+   footer child the pointer; its own children take it back (sketch.css). */
+.ud-slot.ud-slot.ud-footer.ud-footer {
+  pointer-events: none;
+}

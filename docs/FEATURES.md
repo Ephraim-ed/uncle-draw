@@ -74,6 +74,9 @@ This doc lists what Uncle Draw does, for whom, and when. Each feature has an ID,
 | COLLAB-2 | Real-time co-editing | v2 | P0 |
 | COLLAB-3 | Live cursors and presence | v2 | P0 |
 | COLLAB-4 | Follow mode | v2 | P2 |
+| COLLAB-5 | Voice chat | v2 | P2 |
+| COLLAB-6 | Presenter mode | v2 | P2 |
+| COLLAB-7 | Screen sharing | v2 | P2 |
 | HIST-1 | Version history and restore | v2 | P1 |
 | CMT-1 | Comments on the canvas | v2 | P2 |
 
@@ -83,6 +86,9 @@ This doc lists what Uncle Draw does, for whom, and when. Each feature has an ID,
 
 ### AUTH-1 · Sign in with email magic link · v1 · P0
 *As a new or returning user, I want to sign in with just my email, so I don't need another password.*
+
+> **Hidden by default (decided 2026-10-23):** `/login` offers GitHub only. The magic-link form below appears when `VITE_EMAIL_SIGN_IN=true`, which local Supabase and the E2E tests use (GitHub sign-in is off locally). Supabase's email provider still accepts magic links; turn it off in the dashboard to close that door too.
+
 - [ ] `/login` has an email field and "Send me a magic link".
 - [ ] Submitting shows the "Check your inbox" state with the address the link went to, plus a "Use a different email" link.
 - [ ] Clicking the email link signs me in and lands me on `/boards`, or on the page I originally tried to open (AUTH-4).
@@ -388,7 +394,7 @@ Acceptance:
 
 Specified at a high level now; it gets detailed acceptance criteria when v2 planning starts. The technical groundwork is in [TECHNICAL_REQUIREMENTS.md](./TECHNICAL_REQUIREMENTS.md) §15.
 
-**Built:** COLLAB-1…4. COLLAB-1 shipped as an **edit link** instead of email invites (decided 2026-10-13, because the built-in Supabase mailer allows only a few emails an hour):
+**Built:** COLLAB-1…7 and CMT-1 (without email notifications, below). COLLAB-1 shipped as an **edit link** instead of email invites (decided 2026-10-13, because the built-in Supabase mailer allows only a few emails an hour):
 - The owner creates an edit link in the share dialog, next to the view-only link. Copy, "Get a new link" and "Turn off" work like the view link.
 - Anyone who opens it and signs in becomes an **editor**. The board shows up on their dashboard as "Shared with you".
 - Editors draw, add images and see everyone live. Only the owner renames, trashes, shares or manages people.
@@ -401,8 +407,11 @@ Specified at a high level now; it gets detailed acceptance criteria when v2 plan
 | COLLAB-2 | **Real-time co-editing** | Several people edit at once and see each other's changes in under 300 ms. Conflicting edits merge per element (Excalidraw's reconcile). Undo affects only my own changes. |
 | COLLAB-3 | **Live cursors and presence** | Named, colored cursors on the canvas. Avatars of everyone present in the top-right. Idle and away states. |
 | COLLAB-4 | **Follow mode** | Click an avatar to follow that person's viewport. |
+| COLLAB-5 | **Voice chat** | "Join voice" talks with everyone on the board who joined. Mute, leave, and see who's talking on their avatar. Up to 8 people. Asks for the microphone only on joining. |
+| COLLAB-6 | **Presenter mode** | "Present" makes everyone else on the board follow your view, newcomers too, scaled to their screen. Looking around stops following; "Follow" goes back. One presenter at a time. |
+| COLLAB-7 | **Screen sharing** | "Share screen" shows a screen, window or tab to everyone else on the board in a panel they can enlarge or tuck away. One sharer at a time, up to 8 viewers. Sharing needs a desktop browser; watching works anywhere. |
 | HIST-1 | **Version history** | Snapshots every 10 min while editing. Browse, preview and restore (restoring creates a new version). |
-| CMT-1 | **Comments** | Pin a comment thread to a spot or element. Resolve threads. Notify by email. |
+| CMT-1 | **Comments** | Built: the **Comment** tool (C) comments on the selection, or on whatever shape or text is clicked, or on an empty spot. Each thread is a sticky-note marker that follows its shape; it opens a card with the comments and a reply box. Resolve (with Undo) takes a thread off the canvas. I delete my own replies; whoever started a thread deletes it; the owner deletes anything. **Hide comments** in the toolbar (main menu on phones) is remembered per device. Collaborators see new comments and replies live, with a "Pat replied" toast. Not built: email notifications, a list of resolved threads, editing a comment. |
 
 ---
 
@@ -414,7 +423,7 @@ Not planned for any milestone above unless this doc is updated:
 - Native mobile or desktop apps (the web app is responsive and installable later as a PWA).
 - Guest or anonymous editing without an account.
 - Public galleries, search-engine-indexed boards or embedding boards on other sites.
-- Presentation or slide mode beyond Excalidraw's built-in frames.
+- Presentation or slide mode beyond Excalidraw's built-in frames. (Presenter mode, COLLAB-6, only leads everyone's view of the board.)
 
 ---
 

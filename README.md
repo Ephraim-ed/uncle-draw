@@ -8,7 +8,7 @@ The specs live in [`docs/`](./docs):
 - [TECHNICAL_REQUIREMENTS.md](./docs/TECHNICAL_REQUIREMENTS.md): how it works
 - [VISUAL_DESIGN.md](./docs/VISUAL_DESIGN.md): how it looks
 
-This repository implements **v1** (all P0 and P1 features) and v2's **live collaboration** (COLLAB-1…4): an edit link, real-time co-editing, cursors and presence, and follow mode. Version history and comments (HIST-1, CMT-1) aren't built yet.
+This repository implements **v1** (all P0 and P1 features) and v2's **live collaboration** (COLLAB-1…7): an edit link, real-time co-editing, cursors and presence, follow mode, voice chat, presenter mode and screen sharing, plus **comments** (CMT-1) with replies. Version history (HIST-1) isn't built yet.
 
 ## Stack
 
@@ -41,7 +41,7 @@ Without `.env.local`, every route shows a short setup page. The dev-only compone
    - **Site URL**: `http://localhost:5173` for now (later, your production domain).
    - **Redirect URLs**: `http://localhost:5173/auth/callback`, plus your preview and production `…/auth/callback` URLs. Wildcards work for previews.
 5. **Authentication → Providers**:
-   - Email: keep magic links on.
+   - Email: the login page hides magic links unless `VITE_EMAIL_SIGN_IN=true`. Without it, turn the Email provider off here too, or anyone could still request a link through the API.
    - GitHub (AUTH-2): create a GitHub OAuth app whose callback URL is `https://<project-ref>.supabase.co/auth/v1/callback`, then paste its client id and secret here.
 6. Before launch, set up custom SMTP (e.g. Resend) under **Authentication → Emails**, because the built-in mailer is heavily rate-limited.
 
@@ -50,9 +50,10 @@ Without `.env.local`, every route shows a short setup page. The dev-only compone
 ```bash
 npx supabase start            # Postgres, Auth, Storage, Realtime, Functions, Mailpit
 npx supabase status -o env    # copy API_URL and ANON_KEY into .env.local
+                              # and add VITE_EMAIL_SIGN_IN=true (see below)
 ```
 
-- Magic-link emails land in Mailpit at <http://127.0.0.1:54324>.
+- Sign-in shows GitHub only unless `VITE_EMAIL_SIGN_IN=true`. GitHub is off locally, so set it to sign in with magic links. They land in Mailpit at <http://127.0.0.1:54324>.
 - GitHub sign-in is off locally. `supabase/config.toml` explains how to turn it on.
 - Live collaboration needs Realtime, so don't start the stack with `-x realtime`.
 
@@ -100,6 +101,7 @@ CI (`.github/workflows/ci.yml`) runs everything on each pull request: lint, type
   - `SUPABASE_PROJECT_REF`
 - **Push the database before the frontend.** A new frontend on an old schema still draws and saves, but edit links, live collaboration and thumbnails fail until the migrations are in.
 - **Realtime:** collaboration uses private Realtime channels (`board:{id}`), authorized by RLS policies on `realtime.messages` in the migrations. Nothing needs turning on in the dashboard. Realtime has per-project message limits (about 100 a second on the free plan). Each active editor sends at most about 12 messages a second, batching cursor and edits, and nothing while alone on a board. If many people will draw at the same time, check your plan's limits.
+- **Voice and screen sharing:** audio and video go peer to peer over WebRTC; Realtime only carries the setup (one offer and one answer per connection). The browser needs a secure context (https, or localhost). By default the app uses public STUN servers, which connect most home and office networks. Networks that block peer-to-peer traffic need a TURN server: set `VITE_ICE_SERVERS` to a JSON array of `RTCIceServer` (see `.env.example`). TURN credentials in that variable end up in the public bundle, so use a provider that restricts them (e.g. by origin) or rotate them. Voice is capped at 8 people and a shared screen at 8 viewers, since everyone sends directly to everyone else.
 
 ## Project layout
 
@@ -112,7 +114,9 @@ src/
     auth/       login, magic-link callback, route guard, profile
     boards/     dashboard, cards, queries
     editor/     editor page (lazy), save queue, local backup, file sync, thumbnails
-      collab/   live collaboration: Realtime channel, message protocol, presence
+      comments/ comment threads on shapes and spots: markers, cards, the comment tool
+      collab/   live collaboration: Realtime channel, message protocol, presence,
+                voice chat, presenter mode, screen sharing (WebRTC)
     share/      share dialog, edit links, join page, read-only share page (lazy)
   lib/          Supabase client, Zod schemas, IndexedDB cache, helpers
   styles/       tokens, fonts, sketch kit, Excalidraw overrides

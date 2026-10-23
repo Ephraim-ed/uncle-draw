@@ -10,8 +10,12 @@ import type { AppState, BinaryFiles, ExcalidrawImperativeAPI } from "@excalidraw
 import { cacheKeys, writeCache } from "../../lib/localCache";
 import type { LocalBackup, Prefs, Viewport } from "../../lib/schemas";
 import { createThrottledWriter } from "../../lib/throttle";
-import { CollabSession, type CollabIdentity } from "./collab/CollabSession";
+import { CollabSession, NO_LIVE_STATE, type CollabIdentity, type LiveState } from "./collab/CollabSession";
 import { boardChannel, type ConnectFn } from "./collab/transport";
+import { browserScreenMedia, browserVoiceMedia } from "./collab/browserMedia";
+import { iceServers } from "./collab/iceServers";
+import type { ScreenMedia } from "./collab/ScreenShare";
+import type { VoiceMedia } from "./collab/VoiceChat";
 import {
   LOCAL_WRITE_THROTTLE_MS,
   PREF_KEYS,
@@ -79,6 +83,8 @@ export interface CollabStartOptions {
   onPeersChange: (others: number) => void;
   /** Swapped in tests. */
   connect?: ConnectFn;
+  voiceMedia?: VoiceMedia;
+  screenMedia?: ScreenMedia;
 }
 
 /** Another try for images whose upload hadn't finished when we asked. */
@@ -125,6 +131,7 @@ export class EditorSession {
   private latest: Snapshot | null = null;
   private lastSelection: AppState["selectedElementIds"] | null = null;
   private lastViewportKey = "";
+  private lastSizeKey = "";
   private lastPrefsKey: string;
   private lastSeenTheme: "light" | "dark";
   private backupOk = true;
@@ -140,6 +147,11 @@ export class EditorSession {
   /** Last real save to the server, mine or an adopted collaborator's. */
   private savedAt: number | null;
   private listeners = new Set<() => void>();
+  /** Called when a collaborator changes the board's comments (CMT-1). */
+  private commentListeners = new Set<() => void>();
+  /** Voice chat and presenter mode (COLLAB-5/6), for the live bar. */
+  private live: LiveState = NO_LIVE_STATE;
+  private liveListeners = new Set<() => void>();
 
   constructor(private readonly o: EditorSessionOptions) {
     this.lastFingerprint = o.baselineFingerprint;
@@ -237,14 +249,60 @@ export class EditorSession {
       onRemoteSaved: (version, fingerprint) => this.handleRemoteSave(version, fingerprint),
       onFilesNeeded: (ids) => this.fetchMissingFiles(ids),
       onPeersChange: opts.onPeersChange,
+      onCommentsChanged: () => this.commentListeners.forEach((l) => l()),
+      voiceMedia: opts.voiceMedia ?? browserVoiceMedia(iceServers()),
+      screenMedia: opts.screenMedia ?? browserScreenMedia(iceServers()),
+      onLiveChange: (state) => {
+        if (this.collab === collab) this.setLive(state);
+      },
+      notify: (message) => this.o.notify(message, { duration: 5000, id: "live" }),
     });
     this.collab = collab;
     collab.start(api);
     return () => {
-      if (this.collab === collab) this.collab = null;
+      if (this.collab === collab) {
+        this.collab = null;
+        this.setLive(NO_LIVE_STATE);
+      }
       void collab.dispose();
     };
   }
+
+  // --- voice chat, presenter mode and screen sharing (COLLAB-5…7) -----------------
+
+  /** A collaborator changed the board's comments (CMT-1). */
+  onRemoteComments = (listener: () => void) => {
+    this.commentListeners.add(listener);
+    return () => {
+      this.commentListeners.delete(listener);
+    };
+  };
+
+  /** I changed the board's comments: collaborators reload them. */
+  announceComments = () => this.collab?.announceComments();
+
+  subscribeLive = (listener: () => void) => {
+    this.liveListeners.add(listener);
+    return () => this.liveListeners.delete(listener);
+  };
+
+  getLive = (): LiveState => this.live;
+
+  private setLive(state: LiveState) {
+    this.live = state;
+    this.liveListeners.forEach((l) => l());
+  }
+
+  /** Rejects with the browser's error when the microphone isn't available. */
+  joinVoice = (): Promise<void> => this.collab?.joinVoice() ?? Promise.resolve();
+  leaveVoice = () => this.collab?.leaveVoice();
+  setMuted = (muted: boolean) => this.collab?.setMuted(muted);
+  startPresenting = () => this.collab?.startPresenting();
+  stopPresenting = () => this.collab?.stopPresenting();
+  followPresenter = () => this.collab?.followPresenter();
+  /** Rejects with the browser's error (NotAllowedError when the picker is cancelled). */
+  startScreenShare = (): Promise<void> => this.collab?.startScreenShare() ?? Promise.resolve();
+  stopScreenShare = () => this.collab?.stopScreenShare();
 
   setIdentity(identity: CollabIdentity) {
     this.collab?.setIdentity(identity);
@@ -302,6 +360,12 @@ export class EditorSession {
     }
 
     this.files.notify(files);
+
+    const sizeKey = `${appState.width}x${appState.height}`;
+    if (sizeKey !== this.lastSizeKey) {
+      this.lastSizeKey = sizeKey;
+      this.collab?.handleResize();
+    }
 
     const viewportKey = `${appState.scrollX}|${appState.scrollY}|${appState.zoom.value}`;
     if (viewportKey !== this.lastViewportKey) {

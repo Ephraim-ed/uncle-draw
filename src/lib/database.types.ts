@@ -99,6 +99,46 @@ isOneToOne: false
                   Relationships: [
                     
                   ]
+                },"comment_threads": {
+                  Row: {
+                    "board_id": string,"created_at": string,"created_by": string | null,"element_id": string | null,"id": string,"resolved_at": string | null,"resolved_by": string | null,"x": number,"y": number
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "board_id": string,"created_at"?: string,"created_by"?: string | null,"element_id"?: string | null,"id"?: string,"resolved_at"?: string | null,"resolved_by"?: string | null,"x": number,"y": number
+                  }
+                  Update: {
+                    "board_id"?: string,"created_at"?: string,"created_by"?: string | null,"element_id"?: string | null,"id"?: string,"resolved_at"?: string | null,"resolved_by"?: string | null,"x"?: number,"y"?: number
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "comment_threads_board_id_fkey"
+      columns: ["board_id"]
+isOneToOne: false
+      referencedRelation: "boards"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"comments": {
+                  Row: {
+                    "author_id": string,"board_id": string,"body": string,"created_at": string,"id": string,"thread_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "author_id"?: string,"board_id": string,"body": string,"created_at"?: string,"id"?: string,"thread_id": string
+                  }
+                  Update: {
+                    "author_id"?: string,"board_id"?: string,"body"?: string,"created_at"?: string,"id"?: string,"thread_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "comments_thread_id_board_id_fkey"
+      columns: ["thread_id","board_id"]
+isOneToOne: false
+      referencedRelation: "comment_threads"
+      referencedColumns: ["id","board_id"]
+    }
+                  ]
                 },"profiles": {
                   Row: {
                     "avatar_url": string | null,"created_at": string,"display_name": string | null,"id": string
@@ -133,7 +173,12 @@ isOneToOne: false
             [_ in never]: never
           }
           Functions: {
-            "board_id_from_topic":
+            "board_comments":
+{ Args: { "p_board_id": string }; Returns: {
+              "author_avatar_url": string,"author_id": string,"author_name": string,"body": string,"comment_id": string,"created_at": string,"element_id": string,"resolved_at": string,"resolved_by": string,"thread_created_at": string,"thread_created_by": string,"thread_id": string,"x": number,"y": number
+            }[]
+                           },
+"board_id_from_topic":
 { Args: { "p_topic": string }; Returns: string
                            },
 "board_people":
@@ -190,6 +235,9 @@ isOneToOne: false
                            },
 "set_board_thumbnail":
 { Args: { "p_board_id": string,"p_path"?: string }; Returns: undefined
+                           },
+"start_comment_thread":
+{ Args: { "p_board_id": string,"p_body": string,"p_element_id": string,"p_x": number,"p_y": number }; Returns: string
                            }
           }
           Enums: {

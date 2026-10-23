@@ -23,6 +23,8 @@ import {
   IconArrowLeft,
   IconDeviceFloppy,
   IconDownload,
+  IconMessageOff,
+  IconMessagePlus,
   IconPencil,
   IconShare,
   IconSitemap,
@@ -59,6 +61,19 @@ import { renameBoard } from "../boards/boards.api";
 import { boardsKey } from "../boards/boards.queries";
 import { ShareDialog } from "../share/ShareDialog";
 import { BoardTitle } from "./BoardTitle";
+import { LiveBar } from "./collab/LiveBar";
+import {
+  addReply,
+  deleteComment,
+  deleteThread,
+  fetchComments,
+  setResolved,
+  startThread,
+} from "./comments/comments.api";
+import { CommentLayer } from "./comments/CommentLayer";
+import { CommentsController } from "./comments/CommentsController";
+import { CommentToolbarButtons } from "./comments/CommentToolbarButtons";
+import { ScreenView } from "./collab/ScreenView";
 import { EMBED_ALLOW_LIST, HAND_DRAWN_DEFAULTS } from "./constants";
 import { loadBoardFiles } from "./editor.api";
 import { RecoveryDialog, RenameDialog } from "./EditorDialogs";
@@ -123,19 +138,34 @@ function EditorStatus({ iconOnly }: { iconOnly: boolean }) {
   );
 }
 
+/** Main menu: show or hide comments (CMT-1); phones have no room for it in the toolbar. */
+function CommentsMenuItem({ controller }: { controller: CommentsController }) {
+  const { hidden } = useSyncExternalStore(controller.subscribe, controller.getState);
+  return (
+    <MainMenu.Item icon={<IconMessageOff size={16} stroke={1.75} />} onSelect={controller.toggleHidden}>
+      {hidden ? "Show comments" : "Hide comments"}
+    </MainMenu.Item>
+  );
+}
+
 /** renderTopRightUI content (VISUAL_DESIGN.md §6.3): title, status pill, Share, avatar. */
 function EditorTopRight({ isMobile, sidebarOpen }: { isMobile: boolean; sidebarOpen: boolean }) {
   const ui = useContext(EditorUiContext)!;
   const wide = useMediaQuery("(min-width: 1024px)");
   if (isMobile) {
     // Phones (§11): Excalidraw puts this slot in the toolbar row, which has no
-    // room to spare. The status floats under the toolbar instead; Share and
-    // "Back to boards" are in the main menu.
+    // room to spare. The status floats under the toolbar instead, with voice
+    // and presenting opposite it; Share and "Back to boards" are in the main menu.
     return ui.host
       ? createPortal(
-          <div className="ud-slot ud-mobile-status">
-            <EditorStatus iconOnly />
-          </div>,
+          <>
+            <div className="ud-slot ud-mobile-status">
+              <EditorStatus iconOnly />
+            </div>
+            <div className="ud-slot ud-mobile-live">
+              <LiveBar controls={ui.session} compact />
+            </div>
+          </>,
           ui.host,
         )
       : null;
@@ -324,7 +354,29 @@ function BoardEditor({ data, onGone }: { data: ReadyBoard; onGone: () => void })
     if (!api || !host) return;
     return flows.attach(api, host);
   }, [api, host, flows]);
-  // Table and flowchart tools sit in Excalidraw's toolbar; the footer has them if it can't be found.
+  // Comments (CMT-1): markers on the canvas, the comment tool, and live updates from collaborators.
+  const [comments] = useState(
+    () =>
+      new CommentsController({
+        userId: user.id,
+        api: {
+          fetch: () => fetchComments(boardId),
+          start: (anchor, body) => startThread(boardId, anchor, body),
+          reply: (threadId, body) => addReply(boardId, threadId, body),
+          resolve: (threadId, resolved) => setResolved(threadId, resolved ? user.id : null),
+          deleteComment,
+          deleteThread,
+        },
+        announce: session.announceComments,
+        notify: (message, action) => toast({ message, action, duration: action ? 6000 : undefined }),
+      }),
+  );
+  useEffect(() => session.onRemoteComments(comments.reload), [session, comments]);
+  useEffect(() => {
+    if (!api || !host) return;
+    return comments.attach(api, host);
+  }, [api, host, comments]);
+  // Table, flowchart and comment tools sit in Excalidraw's toolbar; the footer has them if it can't be found.
   const toolbar = useToolbarSlot(host);
   const footerTools = toolbar.missing && editable;
 
@@ -506,6 +558,7 @@ function BoardEditor({ data, onGone }: { data: ReadyBoard; onGone: () => void })
           <MainMenu.Item icon={<IconDeviceFloppy size={16} stroke={1.75} />} onSelect={startSaving}>
             Save as template…
           </MainMenu.Item>
+          <CommentsMenuItem controller={comments} />
           <MainMenu.DefaultItems.SaveAsImage />
           <MainMenu.Item icon={<IconDownload size={16} stroke={1.75} />} onSelect={saveToFile}>
             Save to file
@@ -517,18 +570,37 @@ function BoardEditor({ data, onGone }: { data: ReadyBoard; onGone: () => void })
           <MainMenu.DefaultItems.ChangeCanvasBackground />
           <MainMenu.DefaultItems.ClearCanvas />
         </MainMenu>
-        {footerTools ? (
-          <Footer>
-            <div className="ud-slot ud-footer">
-              <SketchButton size="sm" icon={<IconTable size={18} stroke={1.75} />} onClick={openTableDialog}>
-                Table
-              </SketchButton>
-              <SketchButton size="sm" icon={<IconSitemap size={18} stroke={1.75} />} onClick={openTemplates}>
-                Templates
-              </SketchButton>
-            </div>
-          </Footer>
-        ) : null}
+        {/* Excalidraw shows the footer on wider screens only; phones get the live bar from the top-right slot. */}
+        <Footer>
+          <div className="ud-slot ud-footer">
+            {footerTools ? (
+              <>
+                <SketchButton
+                  size="sm"
+                  icon={<IconTable size={18} stroke={1.75} />}
+                  onClick={openTableDialog}
+                >
+                  Table
+                </SketchButton>
+                <SketchButton
+                  size="sm"
+                  icon={<IconSitemap size={18} stroke={1.75} />}
+                  onClick={openTemplates}
+                >
+                  Templates
+                </SketchButton>
+                <SketchButton
+                  size="sm"
+                  icon={<IconMessagePlus size={18} stroke={1.75} />}
+                  onClick={comments.activateTool}
+                >
+                  Comment
+                </SketchButton>
+              </>
+            ) : null}
+            <LiveBar controls={session} compact={false} />
+          </div>
+        </Footer>
         <WelcomeScreen>
           <WelcomeScreen.Hints.MenuHint />
           <WelcomeScreen.Hints.ToolbarHint />
@@ -563,6 +635,8 @@ function BoardEditor({ data, onGone }: { data: ReadyBoard; onGone: () => void })
       openTemplates,
       startSaving,
       footerTools,
+      session,
+      comments,
     ],
   );
 
@@ -588,9 +662,17 @@ function BoardEditor({ data, onGone }: { data: ReadyBoard; onGone: () => void })
         </Excalidraw>
         <TableBar controller={tables} />
         <FlowOverlay controller={flows} />
+        <ScreenView controls={session} />
+        <CommentLayer controller={comments} people={{ userId: user.id, isOwner }} />
       </div>
       {toolbar.slot
-        ? createPortal(<TableToolbarButtons controller={tables} onTemplates={openTemplates} />, toolbar.slot)
+        ? createPortal(
+            <>
+              <TableToolbarButtons controller={tables} onTemplates={openTemplates} />
+              <CommentToolbarButtons controller={comments} />
+            </>,
+            toolbar.slot,
+          )
         : null}
       {rename ? (
         <RenameDialog

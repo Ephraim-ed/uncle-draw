@@ -1,4 +1,4 @@
-import { expect, type Page } from "@playwright/test";
+import { expect, type Browser, type BrowserContextOptions, type Page } from "@playwright/test";
 
 export const SUPABASE_URL = process.env.VITE_SUPABASE_URL ?? process.env.API_URL ?? "http://127.0.0.1:54321";
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SERVICE_ROLE_KEY ?? "";
@@ -55,6 +55,34 @@ export async function createBoard(page: Page): Promise<string> {
   await page.waitForURL(/\/b\/[0-9a-f-]{36}$/);
   await expect(page.locator(".excalidraw")).toBeVisible();
   return page.url().split("/b/")[1]!;
+}
+
+/**
+ * COLLAB-1: the owner (on `page`, in the editor) creates an edit link, and a
+ * second person signs in through it in a new browser context. Resolves once
+ * each sees the other on the board.
+ */
+export async function inviteEditor(
+  page: Page,
+  browser: Browser,
+  opts: { context?: BrowserContextOptions; prepare?: (guest: Page) => Promise<unknown> } = {},
+) {
+  await page.getByRole("button", { name: "Share", exact: true }).click();
+  const editLink = page.getByRole("dialog", { name: /^Share/ }).getByRole("region", { name: "Edit link" });
+  await editLink.getByRole("button", { name: "Create edit link" }).click();
+  const joinUrl = await editLink.getByRole("textbox", { name: "Edit link" }).inputValue();
+  await page.keyboard.press("Escape");
+
+  const context = await browser.newContext(opts.context);
+  const guest = await context.newPage();
+  await opts.prepare?.(guest);
+  await guest.goto(new URL(joinUrl).pathname);
+  await guest.waitForURL(/\/login\?next=/);
+  await signIn(guest, uniqueEmail("bob"), guest.url());
+  await guest.waitForURL(/\/b\/[0-9a-f-]{36}$/);
+  await expect(guest.locator(".UserList__collaborator")).toHaveCount(2);
+  await expect(page.locator(".UserList__collaborator")).toHaveCount(2);
+  return { guest, context };
 }
 
 const TOOL_TITLES = {

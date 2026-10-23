@@ -38,8 +38,9 @@
 .ud-toolbar-tools {
   display: contents;
 }
-/* Phones have a tight toolbar; templates are in the main menu there. */
-.excalidraw.excalidraw--mobile .ud-toolbar-templates {
+/* Phones have a tight toolbar; templates and "Hide comments" are in the main menu there. */
+.excalidraw.excalidraw--mobile .ud-toolbar-templates,
+.excalidraw.excalidraw--mobile .ud-toolbar-hide-comments {
   display: none;
 }
 

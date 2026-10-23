@@ -1146,12 +1146,17 @@
   pointer-events: auto;
 }
 
-/* Footer slot, next to undo/redo: table and template buttons, only when
-   Excalidraw's toolbar can't take them (EDIT-7/8). */
+/* Footer slot, from undo/redo to the help button: table and template
+   buttons, only when Excalidraw's toolbar can't take them (EDIT-7/8), and the
+   live bar on the right (COLLAB-5/6). Only its contents take the pointer. */
 .ud-footer {
   display: flex;
+  flex: 1;
   align-items: center;
   gap: 8px;
+  min-width: 0;
+}
+.ud-footer > * {
   pointer-events: auto;
 }
 
@@ -1193,6 +1198,423 @@
   position: absolute;
   top: calc(env(safe-area-inset-top, 0px) + 68px);
   left: 12px;
+  z-index: 3;
+  pointer-events: auto;
+}
+
+/* Live bar (COLLAB-5/6): voice chat and presenting. In the footer by the
+   help button, clear of the follow badge and toasts in the middle; on phones
+   it floats under the toolbar, next to the status. */
+.ud-livebar.ud-sketch {
+  --ud-sketch-fill: var(--ud-surface);
+  --ud-so: 3px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  margin-left: auto;
+  padding: 3px 6px;
+  color: var(--ud-ink);
+  font-family: var(--ud-font-ui);
+}
+/* Presenting: the frame turns blue, like Excalidraw's follow border. */
+.ud-livebar[data-presenting] > .ud-sketch__art {
+  color: var(--ud-primary);
+}
+.ud-livebar .ud-iconbtn.ud-sketch {
+  width: 34px;
+  height: 34px;
+}
+.ud-livebar__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ud-ink);
+  font-family: var(--ud-font-ui);
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 80ms ease-out;
+}
+.ud-livebar__btn:hover:not(:disabled) {
+  background: var(--ud-primary-soft);
+}
+.ud-livebar__btn:disabled {
+  color: var(--ud-ink-faint);
+  cursor: not-allowed;
+}
+.ud-livebar__btn[aria-pressed="true"] {
+  background: var(--ud-primary-soft);
+  color: var(--ud-primary);
+}
+.ud-livebar__icon {
+  display: inline-flex;
+}
+.ud-livebar .ud-iconbtn.ud-sketch.ud-livebar__muted,
+.ud-livebar .ud-iconbtn.ud-sketch.ud-livebar__leave {
+  color: var(--ud-danger);
+}
+.ud-livebar .ud-iconbtn.ud-sketch.ud-livebar__presenting {
+  color: var(--ud-primary);
+}
+.ud-livebar .ud-iconbtn.ud-sketch.ud-livebar__presenting > .ud-sketch__art {
+  opacity: 1;
+}
+.ud-livebar__group {
+  display: contents;
+}
+.ud-livebar__divider {
+  flex: none;
+  width: 1px;
+  height: 22px;
+  margin: 0 4px;
+  background: color-mix(in srgb, var(--ud-ink) 18%, transparent);
+}
+/* People already talking, next to "Join voice". */
+.ud-livebar__count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--ud-success-soft);
+  color: var(--ud-ink);
+  font-size: 12px;
+  line-height: 18px;
+}
+.ud-livebar__note {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 0 6px;
+  color: var(--ud-ink-muted);
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.ud-livebar__name {
+  display: inline-block;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+}
+/* Someone's shared screen (COLLAB-7): a panel above the live bar, or over
+   most of the canvas when made bigger (clear of the toolbar and footer).
+   It sits over Excalidraw's UI layer (z-index 4: hints, the welcome screen),
+   but that layer also holds its menus and sidebars, so it steps behind while
+   one of them is open. */
+.ud-screen.ud-sketch {
+  --ud-sketch-fill: var(--ud-surface);
+  --ud-so: 3px;
+  position: absolute;
+  right: 16px;
+  bottom: 72px;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: min(420px, calc(100% - 32px));
+  padding: 3px 6px 6px;
+  color: var(--ud-ink);
+  font-family: var(--ud-font-ui);
+}
+.ud-editor:has(.excalidraw .dropdown-menu, .excalidraw .sidebar) .ud-screen.ud-sketch {
+  z-index: 3;
+}
+.ud-screen[data-large] {
+  top: 72px;
+  left: 16px;
+  width: auto;
+}
+.ud-screen[data-hidden] {
+  width: auto;
+  max-width: calc(100% - 32px);
+  padding-bottom: 3px;
+}
+.ud-screen__bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  padding-left: 4px;
+}
+.ud-screen__icon {
+  display: inline-flex;
+  color: var(--ud-ink-muted);
+}
+.ud-screen__title {
+  flex: 1;
+  min-width: 0;
+  margin-right: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 600;
+}
+.ud-screen .ud-iconbtn.ud-sketch {
+  flex: none;
+  width: 34px;
+  height: 34px;
+}
+.ud-screen__well {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 4px;
+  background: var(--ud-surface-sunken);
+}
+.ud-screen[data-large] .ud-screen__well {
+  flex: 1;
+  min-height: 0;
+  aspect-ratio: auto;
+}
+.ud-screen__video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.ud-screen__note {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 12px;
+  color: var(--ud-ink-muted);
+  font-size: 13px;
+  line-height: 18px;
+  text-align: center;
+}
+/* Phones: full width, above Excalidraw's bottom bar. */
+@media (max-width: 639px) {
+  .ud-screen.ud-sketch {
+    left: 12px;
+    right: 12px;
+    bottom: 84px;
+    width: auto;
+  }
+  .ud-screen[data-large] {
+    top: 116px;
+  }
+  .ud-screen[data-hidden] {
+    left: auto;
+  }
+}
+
+/* Comments (CMT-1): sticky-note markers ride the canvas, under Excalidraw's
+   own UI (toolbar, panels) and clipped to the editor. */
+.ud-comments {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  overflow: hidden;
+  pointer-events: none;
+}
+.ud-pin.ud-sketch {
+  --ud-sketch-fill: var(--ud-highlight);
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ud-note-ink);
+  /* Its bottom-left sits on the spot, or just off a shape's top-right corner. */
+  transform: translate(3px, calc(-100% - 3px));
+  cursor: pointer;
+  pointer-events: auto;
+}
+.ud-pin.ud-sketch[data-open] {
+  --ud-sketch-fill: var(--ud-primary-soft);
+  color: var(--ud-primary);
+}
+.ud-pin__initial {
+  font-family: var(--ud-font-hand);
+  font-size: 18px;
+  line-height: 1;
+}
+.ud-pin__count {
+  position: absolute;
+  top: -6px;
+  right: -8px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--ud-primary);
+  color: var(--ud-on-primary);
+  font-family: var(--ud-font-ui);
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 700;
+}
+/* Where a new comment goes, while it's being written. */
+.ud-pin--draft {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--ud-primary);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--ud-primary) 25%, transparent);
+  transform: translate(-6px, -6px);
+}
+
+/* A thread's card: over Excalidraw's UI layer like the shared screen, and
+   behind its menus and sidebars while one is open. */
+.ud-comment.ud-sketch {
+  --ud-sketch-fill: var(--ud-surface);
+  --ud-so: 3px;
+  position: absolute;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: calc(100% - 144px);
+  padding: 8px 12px 12px;
+  color: var(--ud-ink);
+  font-family: var(--ud-font-ui);
+}
+.ud-editor:has(.excalidraw .dropdown-menu, .excalidraw .sidebar) .ud-comment.ud-sketch {
+  z-index: 3;
+}
+.ud-comment .ud-iconbtn.ud-sketch {
+  flex: none;
+  width: 32px;
+  height: 32px;
+}
+.ud-comment__head {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 32px;
+}
+.ud-comment__title {
+  flex: 1;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 700;
+}
+.ud-comment__confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  color: var(--ud-danger);
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 600;
+}
+.ud-comment__list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  margin: 0;
+  padding: 0 2px 0 0;
+  overflow-y: auto;
+  list-style: none;
+}
+.ud-comment__item {
+  display: flex;
+  gap: 8px;
+}
+.ud-comment__main {
+  flex: 1;
+  min-width: 0;
+}
+.ud-comment__meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ud-ink-muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+.ud-comment__author {
+  overflow: hidden;
+  color: var(--ud-ink);
+  font-size: 13px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ud-comment__delete {
+  display: inline-flex;
+  margin-left: auto;
+  padding: 2px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--ud-ink-muted);
+  cursor: pointer;
+}
+.ud-comment__delete:hover {
+  background: var(--ud-danger-soft);
+  color: var(--ud-danger);
+}
+.ud-comment__body {
+  margin: 2px 0 0;
+  font-size: 14px;
+  line-height: 20px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.ud-comment__compose {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ud-comment__input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 44px;
+  max-height: 160px;
+  padding: 8px 10px;
+  border: 1.5px solid var(--ud-ink-faint);
+  border-radius: 6px;
+  background: var(--ud-surface);
+  color: var(--ud-ink);
+  font-family: var(--ud-font-ui);
+  font-size: 14px;
+  line-height: 20px;
+  resize: vertical;
+}
+.ud-comment__input:focus-visible {
+  border-color: var(--ud-primary);
+  outline: 2px solid var(--ud-primary);
+  outline-offset: 1px;
+}
+.ud-comment__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+/* Right of the status pill: Excalidraw's tool column is on the right. */
+.ud-mobile-live {
+  position: absolute;
+  top: calc(env(safe-area-inset-top, 0px) + 68px);
+  left: 60px;
   z-index: 3;
   pointer-events: auto;
 }
