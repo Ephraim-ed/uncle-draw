@@ -138,6 +138,19 @@ export class PeerLinks {
     this.sync();
   }
 
+  /**
+   * Signaling was cut off for a while: collaborators may have hung up on us
+   * meanwhile, though our side can't tell yet. Start over every connection I
+   * offer (whoever answers swaps theirs for the new one); the ones they offer,
+   * they start over when presence shows I'm back.
+   */
+  restart() {
+    if (!this.active) return;
+    for (const link of [...this.links.values()]) {
+      if (link.offerer) void this.offer(link.peer);
+    }
+  }
+
   isConnected(peer: string): boolean {
     return !!this.links.get(peer)?.connected;
   }

@@ -1,5 +1,5 @@
 import { expect, test as base, type Browser, type Page } from "@playwright/test";
-import { createBoard, inviteEditor, signIn, uniqueEmail } from "./helpers";
+import { createBoard, expectTextOnCanvas, inviteEditor, signIn, uniqueEmail, writeText } from "./helpers";
 
 /**
  * COLLAB-5…7: two editors talk over voice chat (Chromium's fake microphone
@@ -37,6 +37,51 @@ function recordPeerConnections() {
   };
 }
 
+/** Keeps the Realtime WebSocket and the join ref of each channel, so a test can play the server's part. */
+function recordRealtimeSocket() {
+  const w = window as unknown as { __realtime?: WebSocket; __joinRefs: Record<string, string> };
+  w.__joinRefs = {};
+  const Original = window.WebSocket;
+  window.WebSocket = class extends Original {
+    constructor(url: string | URL, protocols?: string | string[]) {
+      super(url, protocols);
+      if (!String(url).includes("/realtime/")) return;
+      w.__realtime = this;
+      const send = this.send.bind(this);
+      this.send = (data) => {
+        if (typeof data === "string") {
+          const [joinRef, , topic, event] = JSON.parse(data) as [string, string, string, string];
+          if (event === "phx_join") w.__joinRefs[topic] = joinRef;
+        }
+        send(data);
+      };
+    }
+  };
+}
+
+/**
+ * What the Realtime server does when a hidden tab's access token runs out:
+ * it drops the board's channel (and the tab's presence) and tells the client
+ * the channel is closed.
+ */
+async function serverClosesBoardChannel(page: Page, boardId: string) {
+  await page.evaluate((topic) => {
+    const w = window as unknown as { __realtime: WebSocket; __joinRefs: Record<string, string> };
+    const joinRef = w.__joinRefs[topic];
+    w.__realtime.send(JSON.stringify([joinRef, "leave-1", topic, "phx_leave", {}]));
+    w.__realtime.dispatchEvent(
+      new MessageEvent("message", { data: JSON.stringify([joinRef, null, topic, "phx_close", {}]) }),
+    );
+  }, `realtime:board:${boardId}`);
+}
+
+/** Audio bytes received over the next two seconds (a stuck call gets none). */
+async function audioFlowing(page: Page) {
+  const before = await audioBytesIn(page);
+  await page.waitForTimeout(2000);
+  return (await audioBytesIn(page)) - before;
+}
+
 /** Audio bytes received over connected peer connections. */
 function audioBytesIn(page: Page) {
   return page.evaluate(async () => {
@@ -54,13 +99,14 @@ function audioBytesIn(page: Page) {
 /** Alice owns a board and Bob joins it through the edit link. */
 async function twoEditors(page: Page, browser: Browser) {
   await page.addInitScript(recordPeerConnections);
+  await page.addInitScript(recordRealtimeSocket);
   await signIn(page, uniqueEmail("alice"));
-  await createBoard(page);
+  const boardId = await createBoard(page);
   const { guest, context } = await inviteEditor(page, browser, {
     context: { permissions: ["microphone"] },
     prepare: (bob) => bob.addInitScript(recordPeerConnections),
   });
-  return { bob: guest, bobContext: context };
+  return { bob: guest, bobContext: context, boardId };
 }
 
 const liveBar = (page: Page) => page.getByRole("toolbar", { name: "Voice and sharing" });
@@ -185,6 +231,45 @@ test("screen sharing: everyone else sees the sharer's screen", async ({ page, br
   await liveBar(page).getByRole("button", { name: "Stop sharing" }).click();
   await expect(panel).toHaveCount(0);
   await expect(liveBar(bob).getByRole("button", { name: "Share screen" })).toBeVisible();
+
+  await bobContext.close();
+});
+
+test("after the server closes a board's channel (a hidden tab's token ran out), the call and live edits come back without a refresh", async ({
+  page,
+  browser,
+}) => {
+  const { bob, bobContext, boardId } = await twoEditors(page, browser);
+  await page.bringToFront();
+  await liveBar(page).getByRole("button", { name: "Join voice" }).click();
+  await bob.bringToFront();
+  await liveBar(bob)
+    .getByRole("button", { name: /^Join voice/ })
+    .click();
+  await expect.poll(() => audioFlowing(page), { timeout: 20_000 }).toBeGreaterThan(1000);
+  await expect.poll(() => audioFlowing(bob), { timeout: 20_000 }).toBeGreaterThan(1000);
+
+  await page.bringToFront();
+  await serverClosesBoardChannel(page, boardId);
+
+  // Alice is back on the board for Bob, still in the call, and her edits reach him.
+  await expect(page.locator(".UserList__collaborator")).toHaveCount(2, { timeout: 20_000 });
+  await expect(otherAvatar(bob)).toHaveClass(/is-in-call/, { timeout: 20_000 });
+  await writeText(page, 400, 300, "Back again");
+  await bob.bringToFront();
+  await expectTextOnCanvas(bob, "Back again");
+
+  // They hear each other again.
+  await expect.poll(() => audioFlowing(bob), { timeout: 30_000 }).toBeGreaterThan(1000);
+  await expect.poll(() => audioFlowing(page), { timeout: 30_000 }).toBeGreaterThan(1000);
+
+  // Leaving and joining again works too.
+  await page.bringToFront();
+  await liveBar(page).getByRole("button", { name: "Leave voice" }).click();
+  await liveBar(page)
+    .getByRole("button", { name: /^Join voice/ })
+    .click();
+  await expect.poll(() => audioFlowing(page), { timeout: 30_000 }).toBeGreaterThan(1000);
 
   await bobContext.close();
 });

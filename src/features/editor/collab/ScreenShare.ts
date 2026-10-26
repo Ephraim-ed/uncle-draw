@@ -139,6 +139,11 @@ export class ScreenShare {
     this.o.onChange();
   }
 
+  /** Back on the board channel after losing it: send my screen afresh. */
+  reconnected() {
+    this.out.restart();
+  }
+
   /** Who gets my screen while I share, by session id. */
   setViewers(sessionIds: Iterable<string>) {
     this.out.setMembers(sessionIds);

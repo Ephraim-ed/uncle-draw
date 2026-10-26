@@ -409,6 +409,28 @@ describe("CollabSession voice chat (COLLAB-5)", () => {
     expect(t.voice.pcs[0]!.closed).toBe(false);
   });
 
+  it("after a reconnect, starts over the calls it offers and reloads comments", async () => {
+    const onCommentsChanged = vi.fn();
+    const t = setup({ onCommentsChanged });
+    t.connect();
+    await t.session.joinVoice();
+    t.handlers().onPresence([t.me, { ...t.peer, voice: "on" }]);
+    await vi.advanceTimersByTimeAsync(20);
+    const rtc = () => t.sent.filter((m) => m.event === "rtc").map((m) => m.payload);
+    const first = rtc().at(-1)!;
+    expect(onCommentsChanged).not.toHaveBeenCalled();
+
+    // The channel was gone for a while (say, a hidden tab whose token ran out).
+    t.handlers().onStatus(false);
+    t.handlers().onStatus(true);
+    await vi.advanceTimersByTimeAsync(20);
+    const again = rtc().at(-1)!;
+    expect(again).toMatchObject({ s: ME, to: PEER, m: "voice", kind: "offer" });
+    expect(again.id).not.toBe(first.id);
+    expect(t.voice.pcs[0]!.closed).toBe(true);
+    expect(onCommentsChanged).toHaveBeenCalledTimes(1);
+  });
+
   it("leaves the call when the editor closes", async () => {
     const t = setup();
     t.connect();

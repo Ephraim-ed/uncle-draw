@@ -615,7 +615,15 @@ export class CollabSession {
     this.trackPresence();
     // Everyone answers with their scene, so we catch up on what we missed.
     this.transport?.send("hello", { s: this.o.sessionId });
-    if (this.everConnected) this.resyncPending = true;
+    if (this.everConnected) {
+      this.resyncPending = true;
+      // Calls carry on peer to peer, but collaborators may have hung up on us
+      // while we were gone (a hidden tab's channel can be away for minutes).
+      this.voice.reconnected();
+      this.screen.reconnected();
+      // Comments may have changed meanwhile.
+      this.o.onCommentsChanged?.();
+    }
     this.everConnected = true;
   }
 

@@ -189,6 +189,11 @@ export class VoiceChat {
     this.o.onChange();
   }
 
+  /** Back on the board channel after losing it: start over the connections I offer. */
+  reconnected() {
+    this.links.restart();
+  }
+
   /** Everyone else in the call, by session id (from presence). */
   setMembers(sessionIds: Iterable<string>) {
     this.links.setMembers(sessionIds);

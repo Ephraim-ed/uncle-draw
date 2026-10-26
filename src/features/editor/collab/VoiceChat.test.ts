@@ -143,6 +143,27 @@ describe("VoiceChat (COLLAB-5)", () => {
     expect(net.sent.at(-1)).toMatchObject({ kind: "answer", id: offers[1]!.id });
   });
 
+  it("after a reconnect, the side that offers starts over and the other swaps in the new connection", async () => {
+    const net = network();
+    const a = makeTab("aaa", net);
+    const b = makeTab("bbb", net);
+    await connectPair(a, b);
+    const offers = () => net.sent.filter((m) => m.kind === "offer");
+
+    b.chat.reconnected(); // "bbb" answers: it waits for "aaa"
+    await vi.advanceTimersByTimeAsync(20);
+    expect(offers()).toHaveLength(1);
+
+    a.chat.reconnected();
+    await vi.advanceTimersByTimeAsync(20);
+    expect(offers()).toHaveLength(2);
+    expect(offers()[1]!.id).not.toBe(offers()[0]!.id);
+    expect(a.pcs[0]!.closed).toBe(true);
+    expect(b.pcs[0]!.closed).toBe(true);
+    expect(b.pcs).toHaveLength(2);
+    expect(net.sent.at(-1)).toMatchObject({ s: "bbb", kind: "answer", id: offers()[1]!.id });
+  });
+
   it("retries a connection that never comes up, backing off", async () => {
     const net = network();
     const a = makeTab("aaa", net);

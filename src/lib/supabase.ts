@@ -18,6 +18,10 @@ export const supabase = createClient<Database>(
       // /auth/callback exchanges the code itself so it can honor `next`.
       detectSessionInUrl: false,
     },
+    // Realtime heartbeats from a Web Worker keep on time in background tabs,
+    // whose timers browsers throttle (a late heartbeat drops the connection).
+    // (Only where there are workers: realtime-js refuses otherwise, e.g. in jsdom.)
+    realtime: { worker: typeof Worker !== "undefined" },
   },
 );
 
