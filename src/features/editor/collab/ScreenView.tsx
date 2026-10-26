@@ -4,8 +4,10 @@ import {
   IconChevronUp,
   IconDeviceDesktop,
   IconMinus,
+  IconPointer,
+  IconPointerOff,
 } from "@tabler/icons-react";
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type PointerEvent } from "react";
 import { IconButton, SketchArt, hashSeed } from "../../../components/sketch";
 import { SCREEN_MAX_VIEWERS } from "../constants";
 import type { LiveControls } from "./LiveBar";
@@ -32,7 +34,14 @@ function ScreenVideo({ stream, label }: { stream: MediaStream; label: string }) 
  * else gets automatically. It can grow to fill the canvas or tuck away into
  * its title bar. Double-click the picture to switch sizes.
  */
-export function ScreenView({ controls }: { controls: Pick<LiveControls, "subscribeLive" | "getLive"> }) {
+export function ScreenView({
+  controls,
+}: {
+  controls: Pick<
+    LiveControls,
+    "subscribeLive" | "getLive" | "requestPointer" | "stopPointer" | "sendPointerMove"
+  >;
+}) {
   const live = useSyncExternalStore(controls.subscribeLive, controls.getLive);
   const [large, setLarge] = useState(false);
   /** The sharer whose screen I tucked away; a new sharer shows again. */
@@ -41,6 +50,20 @@ export function ScreenView({ controls }: { controls: Pick<LiveControls, "subscri
   if (!sharer || sharer.isMe) return null;
 
   const title = `${sharer.name}'s screen`;
+  const access = live.pointerAccess;
+  // Fractions of the picture itself, not of the letterboxed video element.
+  const point = (e: PointerEvent<HTMLDivElement>) => {
+    if (access !== "granted") return;
+    const video = e.currentTarget.querySelector("video");
+    if (!video || !video.videoWidth || !video.videoHeight) return;
+    const box = video.getBoundingClientRect();
+    const scale = Math.min(box.width / video.videoWidth, box.height / video.videoHeight);
+    const width = video.videoWidth * scale;
+    const height = video.videoHeight * scale;
+    const x = (e.clientX - (box.left + (box.width - width) / 2)) / width;
+    const y = (e.clientY - (box.top + (box.height - height) / 2)) / height;
+    if (x >= 0 && x <= 1 && y >= 0 && y <= 1) controls.sendPointerMove(x, y);
+  };
   const hidden = hiddenFor === sharer.sessionId;
   return (
     <section
@@ -61,6 +84,25 @@ export function ScreenView({ controls }: { controls: Pick<LiveControls, "subscri
           </IconButton>
         ) : (
           <>
+            {live.screenStream ? (
+              access === "granted" || access === "requested" ? (
+                <IconButton
+                  label={access === "granted" ? "Stop pointer" : "Cancel pointer request"}
+                  aria-pressed={access === "granted"}
+                  onClick={controls.stopPointer}
+                >
+                  <IconPointerOff {...ICON} />
+                </IconButton>
+              ) : (
+                <IconButton
+                  label={access === "denied" ? "Request pointer again" : "Request pointer"}
+                  title={`Ask ${sharer.name} to let you point at their screen`}
+                  onClick={controls.requestPointer}
+                >
+                  <IconPointer {...ICON} />
+                </IconButton>
+              )
+            ) : null}
             <IconButton label={large ? "Make smaller" : "Make bigger"} onClick={() => setLarge(!large)}>
               {large ? <IconArrowsMinimize {...ICON} /> : <IconArrowsMaximize {...ICON} />}
             </IconButton>
@@ -71,14 +113,28 @@ export function ScreenView({ controls }: { controls: Pick<LiveControls, "subscri
         )}
       </div>
       {hidden ? null : (
-        <div className="ud-screen__well" onDoubleClick={() => setLarge(!large)}>
+        <div
+          className="ud-screen__well"
+          data-pointing={access === "granted" || undefined}
+          onDoubleClick={() => setLarge(!large)}
+          onPointerMove={point}
+        >
           {live.screenFull ? (
             <p className="ud-screen__note">
               {SCREEN_MAX_VIEWERS} people are watching already. You&apos;ll see it as soon as there&apos;s
               room.
             </p>
           ) : live.screenStream ? (
-            <ScreenVideo stream={live.screenStream} label={title} />
+            <>
+              <ScreenVideo stream={live.screenStream} label={title} />
+              {access === "requested" || access === "denied" ? (
+                <p className="ud-screen__toast" role="status">
+                  {access === "requested"
+                    ? `Waiting for ${sharer.name} to allow your pointer…`
+                    : `${sharer.name} didn't allow a pointer.`}
+                </p>
+              ) : null}
+            </>
           ) : (
             <p className="ud-screen__note" role="status">
               Connecting…

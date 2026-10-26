@@ -15,6 +15,7 @@ import {
   COLLAB_IDLE_MS,
   COLLAB_TICK_MS,
   SCREEN_MAX_VIEWERS,
+  SCREEN_POINTER_IDLE_MS,
   VOICE_MAX_PEOPLE,
 } from "../constants";
 import { appStateKey, isSyncable, pickDbAppState, type DbAppState } from "../serialize";
@@ -24,10 +25,12 @@ import {
   filesSchema,
   followSchema,
   helloSchema,
+  pointerSchema,
   rtcSchema,
   savedSchema,
   tickSchema,
   type CollabEvent,
+  type PointerPayload,
   type PresenceMeta,
   type TickPayload,
 } from "./protocol";
@@ -78,6 +81,22 @@ export interface LiveState {
   watchers: number;
   /** Someone shares, but enough people are watching already. */
   screenFull: boolean;
+  /** My pointer on the shared screen I watch (COLLAB-8). */
+  pointerAccess: PointerAccess;
+  /** People asking to point at my screen, while I share. */
+  pointerRequests: Array<{ sessionId: string; name: string }>;
+  /** Viewers' pointers on my screen, while I share. */
+  pointers: ScreenPointer[];
+}
+
+export type PointerAccess = "none" | "requested" | "granted" | "denied";
+
+/** A viewer's pointer on my shared screen, as fractions of the picture. */
+export interface ScreenPointer {
+  sessionId: string;
+  name: string;
+  x: number;
+  y: number;
 }
 
 export const NO_LIVE_STATE: LiveState = {
@@ -95,7 +114,16 @@ export const NO_LIVE_STATE: LiveState = {
   screenStream: null,
   watchers: 0,
   screenFull: false,
+  pointerAccess: "none",
+  pointerRequests: [],
+  pointers: [],
 };
+
+function pointerKey(live: LiveState): string {
+  const requests = live.pointerRequests.map((r) => `${r.sessionId}:${r.name}`).join(",");
+  const pointers = live.pointers.map((p) => `${p.sessionId}:${p.name}:${p.x}:${p.y}`).join(",");
+  return `${requests}|${pointers}`;
+}
 
 function sameLive(a: LiveState, b: LiveState): boolean {
   return (
@@ -114,7 +142,9 @@ function sameLive(a: LiveState, b: LiveState): boolean {
     a.sharer?.name === b.sharer?.name &&
     a.screenStream === b.screenStream &&
     a.watchers === b.watchers &&
-    a.screenFull === b.screenFull
+    a.screenFull === b.screenFull &&
+    a.pointerAccess === b.pointerAccess &&
+    pointerKey(a) === pointerKey(b)
   );
 }
 
@@ -189,6 +219,9 @@ type Pointer = NonNullable<TickPayload["p"]>;
  *   else follows them, newcomers included. The earliest presenter wins.
  * - Screen sharing (COLLAB-7): presence says who's sharing (the earliest
  *   wins); they send their screen to the first few other tabs by session id.
+ * - Screen pointers (COLLAB-8): a viewer asks the sharer to point; once
+ *   allowed, their mouse over the shared picture goes to the sharer as
+ *   fractions of it, shown there as a named cursor.
  */
 export class CollabSession {
   private api: CollabApi | null = null;
@@ -233,6 +266,15 @@ export class CollabSession {
   private sharingSince: number | null = null;
   private sharer: Presenter | null = null;
   private screenFull = false;
+  /** Viewer side (COLLAB-8): the sharer I asked, and where that stands. */
+  private pointerTarget: string | null = null;
+  private pointerAccess: PointerAccess = "none";
+  private lastPointerSent = 0;
+  /** Sharer side: who asked, who may point, and where they point now. */
+  private readonly pointerRequests = new Set<string>();
+  private readonly pointerGrants = new Set<string>();
+  private readonly pointerPositions = new Map<string, { x: number; y: number }>();
+  private readonly pointerTimers = new Map<string, ReturnType<typeof setTimeout>>();
   /** The last view of whoever I follow, to fit again when my window resizes. */
   private followedView: { from: string; bounds: NonNullable<TickPayload["v"]> } | null = null;
   private live: LiveState = NO_LIVE_STATE;
@@ -431,6 +473,42 @@ export class CollabSession {
     this.screen.stop();
   }
 
+  /** Asks the sharer to let me point at their screen. */
+  requestPointer() {
+    const sharer = this.sharer;
+    if (this.disposed || !sharer || sharer.id === this.o.sessionId || !this.connected) return;
+    if (this.pointerAccess === "requested" || this.pointerAccess === "granted") return;
+    this.pointerTarget = sharer.id;
+    this.pointerAccess = "requested";
+    this.sendPointer(sharer.id, "request");
+    this.emitLive();
+  }
+
+  /** Gives up my pointer (or a request still waiting). */
+  stopPointer() {
+    if (this.pointerAccess === "none") return;
+    if (this.pointerTarget) this.sendPointer(this.pointerTarget, "stop");
+    this.pointerAccess = "none";
+    this.emitLive();
+  }
+
+  /** My mouse is over the shared picture; x and y are fractions of it. */
+  sendPointerMove(x: number, y: number) {
+    if (this.pointerAccess !== "granted" || !this.pointerTarget) return;
+    const now = Date.now();
+    if (now - this.lastPointerSent < this.tickMs) return;
+    this.lastPointerSent = now;
+    this.sendPointer(this.pointerTarget, "move", Math.min(1, Math.max(0, x)), Math.min(1, Math.max(0, y)));
+  }
+
+  /** As the sharer: let a viewer point at my screen, or don't. */
+  answerPointer(sessionId: string, allow: boolean) {
+    if (!this.pointerRequests.delete(sessionId)) return;
+    if (allow) this.pointerGrants.add(sessionId);
+    this.sendPointer(sessionId, allow ? "allow" : "deny");
+    this.emitLive();
+  }
+
   /** My window changed size: fit the view I follow into it again. */
   handleResize() {
     const view = this.followedView;
@@ -486,6 +564,8 @@ export class CollabSession {
     this.voice.leave();
     this.screen.dispose();
     this.disposed = true;
+    for (const timer of this.pointerTimers.values()) clearTimeout(timer);
+    this.pointerTimers.clear();
     if (this.tickTimer) clearTimeout(this.tickTimer);
     if (this.idleTimer) clearInterval(this.idleTimer);
     for (const cleanup of this.cleanups.splice(0)) cleanup();
@@ -535,6 +615,12 @@ export class CollabSession {
       case "comments": {
         const msg = commentsSchema.safeParse(raw);
         if (msg.success && msg.data.s !== this.o.sessionId) this.o.onCommentsChanged?.();
+        return;
+      }
+      case "pointer": {
+        const msg = pointerSchema.safeParse(raw);
+        if (msg.success && msg.data.to === this.o.sessionId && msg.data.s !== this.o.sessionId)
+          this.receivePointer(msg.data);
         return;
       }
       case "rtc": {
@@ -650,6 +736,7 @@ export class CollabSession {
     }
     this.updatePresenter();
     this.updateSharer();
+    this.syncPointers();
     if (this.peers.size > 0 && this.resyncPending) {
       // Back after a disconnect: our offline edits, and anything lost on the way.
       this.resyncPending = false;
@@ -750,6 +837,7 @@ export class CollabSession {
       this.trackPresence();
       this.updateSharer();
     }
+    this.syncPointers();
     this.emitLive();
   }
 
@@ -776,7 +864,82 @@ export class CollabSession {
     this.screenFull = watching && !audience.includes(me);
     this.screen.setViewers(next?.id === me ? audience : []);
     this.screen.watch(watching && !this.screenFull ? next.id : null);
+    this.syncPointers();
     this.emitLive();
+  }
+
+  // --- screen pointers (COLLAB-8) ------------------------------------------------
+
+  private sendPointer(to: string, kind: PointerPayload["kind"], x?: number, y?: number) {
+    if (!this.connected) return;
+    this.transport?.send("pointer", {
+      s: this.o.sessionId,
+      to,
+      kind,
+      ...(x === undefined || y === undefined ? {} : { x, y }),
+    });
+  }
+
+  private receivePointer(msg: PointerPayload) {
+    const from = msg.s;
+    switch (msg.kind) {
+      case "request": {
+        const peer = this.peers.get(from);
+        if (!this.sharingSince || !peer) return;
+        if (this.pointerGrants.has(from)) return this.sendPointer(from, "allow");
+        if (this.pointerRequests.has(from)) return;
+        this.pointerRequests.add(from);
+        this.o.notify?.(`${peer.name} wants to point at your screen.`);
+        this.emitLive();
+        return;
+      }
+      case "stop":
+        if (this.dropPointer(from)) this.emitLive();
+        return;
+      case "move": {
+        if (!this.pointerGrants.has(from) || msg.x === undefined || msg.y === undefined) return;
+        this.pointerPositions.set(from, { x: msg.x, y: msg.y });
+        clearTimeout(this.pointerTimers.get(from));
+        this.pointerTimers.set(
+          from,
+          setTimeout(() => {
+            this.pointerTimers.delete(from);
+            if (this.pointerPositions.delete(from)) this.emitLive();
+          }, SCREEN_POINTER_IDLE_MS),
+        );
+        this.emitLive();
+        return;
+      }
+      case "allow":
+      case "deny":
+        if (this.pointerAccess !== "requested" || this.pointerTarget !== from) return;
+        this.pointerAccess = msg.kind === "allow" ? "granted" : "denied";
+        this.emitLive();
+        return;
+    }
+  }
+
+  /** Forgets a viewer's request, permission and pointer; true if there was any. */
+  private dropPointer(id: string): boolean {
+    clearTimeout(this.pointerTimers.get(id));
+    this.pointerTimers.delete(id);
+    const a = this.pointerRequests.delete(id);
+    const b = this.pointerGrants.delete(id);
+    const c = this.pointerPositions.delete(id);
+    return a || b || c;
+  }
+
+  /** Sharer, viewers or the connection changed: end pointers that no longer make sense. */
+  private syncPointers() {
+    const watching =
+      this.connected && this.sharer && this.sharer.id !== this.o.sessionId ? this.sharer.id : null;
+    if (this.pointerTarget !== watching) {
+      this.pointerTarget = watching;
+      this.pointerAccess = "none";
+    }
+    for (const id of new Set([...this.pointerRequests, ...this.pointerGrants])) {
+      if (!this.sharingSince || !this.peers.has(id)) this.dropPointer(id);
+    }
   }
 
   /** Presence changed: follow a new presenter, or stop following one who finished. */
@@ -839,6 +1002,20 @@ export class CollabSession {
       screenStream: this.screen.getStream(),
       watchers: this.sharingSince ? this.screen.viewerCount : 0,
       screenFull: this.screenFull,
+      pointerAccess: this.pointerAccess,
+      pointerRequests: this.sharingSince
+        ? [...this.pointerRequests].map((id) => ({
+            sessionId: id,
+            name: this.peers.get(id)?.name ?? "Someone",
+          }))
+        : [],
+      pointers: this.sharingSince
+        ? [...this.pointerPositions].map(([id, at]) => ({
+            sessionId: id,
+            name: this.peers.get(id)?.name ?? "Someone",
+            ...at,
+          }))
+        : [],
     };
     if (sameLive(next, this.live)) return;
     this.live = next;

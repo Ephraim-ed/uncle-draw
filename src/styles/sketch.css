@@ -1402,6 +1402,86 @@
   line-height: 18px;
   text-align: center;
 }
+.ud-screen__well[data-pointing] {
+  cursor: crosshair;
+}
+.ud-screen__toast {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  margin: 0;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: var(--ud-surface);
+  color: var(--ud-ink);
+  font-size: 13px;
+  line-height: 18px;
+  text-align: center;
+}
+
+/* Screen pointers (COLLAB-8): requests for the sharer, and viewers' cursors. */
+.ud-pointer-asks.ud-sketch {
+  --ud-sketch-fill: var(--ud-surface);
+  --ud-so: 3px;
+  position: absolute;
+  top: 72px;
+  left: 50%;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: min(420px, calc(100% - 32px));
+  padding: 3px 6px 6px;
+  transform: translateX(-50%);
+  color: var(--ud-ink);
+  font-family: var(--ud-font-ui);
+}
+.ud-pointer-asks__row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.ud-pointer-asks__text {
+  flex: 1;
+  min-width: 0;
+  padding-left: 4px;
+  font-size: 14px;
+  line-height: 20px;
+}
+.ud-pointer-asks .ud-iconbtn.ud-sketch {
+  flex: none;
+  width: 34px;
+  height: 34px;
+}
+.ud-pointers {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  overflow: hidden;
+  pointer-events: none;
+}
+.ud-pointers__cursor {
+  position: absolute;
+  display: flex;
+  align-items: flex-start;
+  gap: 2px;
+  color: hsl(var(--ud-pointer-hue) 70% 42%);
+  transition:
+    left 80ms linear,
+    top 80ms linear;
+}
+.ud-pointers__name {
+  margin-top: 16px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: hsl(var(--ud-pointer-hue) 70% 42%);
+  color: #fff;
+  font-family: var(--ud-font-ui);
+  font-size: 12px;
+  line-height: 16px;
+  white-space: nowrap;
+}
 /* Phones: full width, above Excalidraw's bottom bar. */
 @media (max-width: 639px) {
   .ud-screen.ud-sketch {

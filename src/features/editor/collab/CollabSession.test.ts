@@ -3,6 +3,7 @@ import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
 import type { AppState, Collaborator, SceneData, SocketId } from "@excalidraw/excalidraw/types";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fakeScreenMedia, fakeVoiceMedia } from "../../../test/fakeVoice";
+import { SCREEN_POINTER_IDLE_MS } from "../constants";
 import { appStateKey, restoreScene } from "../serialize";
 import { CollabSession, type CollabApi, type LiveState } from "./CollabSession";
 import { chunkElements, type CollabEvent, type PresenceMeta } from "./protocol";
@@ -637,6 +638,98 @@ describe("CollabSession screen sharing (COLLAB-7)", () => {
     expect(t.screen.display.tracks[0]!.stopped).toBe(true);
     expect(t.notify).toHaveBeenCalledWith("Pat is already sharing their screen.");
     expect(t.live()).toMatchObject({ screen: "off", sharer: { sessionId: PEER } });
+  });
+});
+
+describe("CollabSession screen pointers (COLLAB-8)", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  const pointerMsgs = (t: ReturnType<typeof setup>) =>
+    t.sent.filter((m) => m.event === "pointer").map((m) => m.payload);
+
+  it("a viewer asks, the sharer allows, and the pointer follows their mouse", () => {
+    const t = setup();
+    t.connect();
+    t.handlers().onPresence([t.me, { ...t.peer, sharing: 1000 }]);
+    t.session.requestPointer();
+    expect(pointerMsgs(t).at(-1)).toEqual({ s: ME, to: PEER, kind: "request" });
+    expect(t.live()?.pointerAccess).toBe("requested");
+
+    // Nothing goes out before they say yes.
+    t.session.sendPointerMove(0.5, 0.5);
+    expect(pointerMsgs(t)).toHaveLength(1);
+
+    t.handlers().onMessage("pointer", { s: PEER, to: ME, kind: "allow" });
+    expect(t.live()?.pointerAccess).toBe("granted");
+    t.session.sendPointerMove(0.25, 2);
+    expect(pointerMsgs(t).at(-1)).toEqual({ s: ME, to: PEER, kind: "move", x: 0.25, y: 1 });
+    // Throttled to the tick rate.
+    t.session.sendPointerMove(0.3, 0.3);
+    expect(pointerMsgs(t)).toHaveLength(2);
+
+    t.session.stopPointer();
+    expect(pointerMsgs(t).at(-1)).toMatchObject({ kind: "stop" });
+    expect(t.live()?.pointerAccess).toBe("none");
+  });
+
+  it("a denied viewer can ask again; a new sharer resets it", () => {
+    const t = setup();
+    t.connect();
+    t.handlers().onPresence([t.me, { ...t.peer, sharing: 1000 }]);
+    t.session.requestPointer();
+    t.handlers().onMessage("pointer", { s: PEER, to: ME, kind: "deny" });
+    expect(t.live()?.pointerAccess).toBe("denied");
+    t.session.requestPointer();
+    expect(t.live()?.pointerAccess).toBe("requested");
+    t.handlers().onPresence([t.me, t.peer]);
+    expect(t.live()?.pointerAccess).toBe("none");
+  });
+
+  it("the sharer sees the request, allows it, and shows the pointer until it goes idle", async () => {
+    const t = setup();
+    t.connect();
+    await t.session.startScreenShare();
+    t.handlers().onMessage("pointer", { s: PEER, to: ME, kind: "request" });
+    expect(t.notify).toHaveBeenCalledWith("Pat wants to point at your screen.");
+    expect(t.live()?.pointerRequests).toEqual([{ sessionId: PEER, name: "Pat" }]);
+
+    // Moves from someone not allowed yet are ignored.
+    t.handlers().onMessage("pointer", { s: PEER, to: ME, kind: "move", x: 0.1, y: 0.2 });
+    expect(t.live()?.pointers).toEqual([]);
+
+    t.session.answerPointer(PEER, true);
+    expect(pointerMsgs(t).at(-1)).toEqual({ s: ME, to: PEER, kind: "allow" });
+    expect(t.live()?.pointerRequests).toEqual([]);
+
+    t.handlers().onMessage("pointer", { s: PEER, to: ME, kind: "move", x: 0.1, y: 0.2 });
+    expect(t.live()?.pointers).toEqual([{ sessionId: PEER, name: "Pat", x: 0.1, y: 0.2 }]);
+    await vi.advanceTimersByTimeAsync(SCREEN_POINTER_IDLE_MS + 10);
+    expect(t.live()?.pointers).toEqual([]);
+  });
+
+  it("denying, stopping, leaving or ending the share clears pointers", async () => {
+    const t = setup();
+    t.connect();
+    await t.session.startScreenShare();
+    t.handlers().onMessage("pointer", { s: PEER, to: ME, kind: "request" });
+    t.session.answerPointer(PEER, false);
+    expect(pointerMsgs(t).at(-1)).toMatchObject({ kind: "deny" });
+    t.handlers().onMessage("pointer", { s: PEER, to: ME, kind: "move", x: 0.1, y: 0.2 });
+    expect(t.live()?.pointers).toEqual([]);
+
+    t.handlers().onMessage("pointer", { s: PEER, to: ME, kind: "request" });
+    t.session.answerPointer(PEER, true);
+    t.handlers().onMessage("pointer", { s: PEER, to: ME, kind: "move", x: 0.1, y: 0.2 });
+    t.handlers().onMessage("pointer", { s: PEER, to: ME, kind: "stop" });
+    expect(t.live()?.pointers).toEqual([]);
+
+    t.handlers().onMessage("pointer", { s: PEER, to: ME, kind: "request" });
+    t.session.answerPointer(PEER, true);
+    t.handlers().onPresence([t.me]);
+    t.handlers().onPresence([t.me, t.peer]);
+    t.handlers().onMessage("pointer", { s: PEER, to: ME, kind: "move", x: 0.1, y: 0.2 });
+    expect(t.live()?.pointers).toEqual([]);
   });
 });
 

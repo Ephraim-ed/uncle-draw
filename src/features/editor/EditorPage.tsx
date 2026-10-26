@@ -73,6 +73,7 @@ import {
 import { CommentLayer } from "./comments/CommentLayer";
 import { CommentsController } from "./comments/CommentsController";
 import { CommentToolbarButtons } from "./comments/CommentToolbarButtons";
+import { ScreenPointers } from "./collab/ScreenPointers";
 import { ScreenView } from "./collab/ScreenView";
 import { EMBED_ALLOW_LIST, HAND_DRAWN_DEFAULTS } from "./constants";
 import { loadBoardFiles } from "./editor.api";
@@ -663,6 +664,7 @@ function BoardEditor({ data, onGone }: { data: ReadyBoard; onGone: () => void })
         <TableBar controller={tables} />
         <FlowOverlay controller={flows} />
         <ScreenView controls={session} />
+        <ScreenPointers controls={session} />
         <CommentLayer controller={comments} people={{ userId: user.id, isOwner }} />
       </div>
       {toolbar.slot

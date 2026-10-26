@@ -303,6 +303,10 @@ export class EditorSession {
   /** Rejects with the browser's error (NotAllowedError when the picker is cancelled). */
   startScreenShare = (): Promise<void> => this.collab?.startScreenShare() ?? Promise.resolve();
   stopScreenShare = () => this.collab?.stopScreenShare();
+  requestPointer = () => this.collab?.requestPointer();
+  stopPointer = () => this.collab?.stopPointer();
+  sendPointerMove = (x: number, y: number) => this.collab?.sendPointerMove(x, y);
+  answerPointer = (sessionId: string, allow: boolean) => this.collab?.answerPointer(sessionId, allow);
 
   setIdentity(identity: CollabIdentity) {
     this.collab?.setIdentity(identity);

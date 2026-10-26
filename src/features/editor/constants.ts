@@ -64,6 +64,8 @@ export const COLLAB_IDLE_MS = 60_000;
 export const VOICE_MAX_PEOPLE = 8;
 /** Screen sharing (COLLAB-7) sends one video per viewer, so it's capped too. */
 export const SCREEN_MAX_VIEWERS = 8;
+/** A viewer's pointer on a shared screen vanishes after this long without moving (COLLAB-8). */
+export const SCREEN_POINTER_IDLE_MS = 3000;
 /** WebRTC connections: how long to wait for ICE candidates before sending an offer or answer anyway. */
 export const PEER_GATHER_MS = 2500;
 /** A connection that isn't up by then is started over (by whoever offered it). */

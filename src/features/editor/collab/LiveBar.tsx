@@ -27,6 +27,11 @@ export interface LiveControls {
   followPresenter: () => void;
   startScreenShare: () => Promise<void>;
   stopScreenShare: () => void;
+  /** Pointers on a shared screen (COLLAB-8). */
+  requestPointer: () => void;
+  stopPointer: () => void;
+  sendPointerMove: (x: number, y: number) => void;
+  answerPointer: (sessionId: string, allow: boolean) => void;
 }
 
 const ICON = { size: 18, stroke: 1.75 } as const;

@@ -23,6 +23,10 @@ function controls(initial: Partial<LiveState>) {
     followPresenter: vi.fn(),
     startScreenShare: vi.fn(() => Promise.resolve()),
     stopScreenShare: vi.fn(),
+    requestPointer: vi.fn(),
+    stopPointer: vi.fn(),
+    sendPointerMove: vi.fn(),
+    answerPointer: vi.fn(),
     set(next) {
       state = { ...state, ...next };
       act(() => listeners.forEach((l) => l()));

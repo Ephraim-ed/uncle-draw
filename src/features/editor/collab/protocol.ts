@@ -7,7 +7,16 @@ import { appStateSubsetSchema, elementSchema } from "../../../lib/schemas";
  * elements then go through restoreElements() like any other scene data.
  */
 
-export const COLLAB_EVENTS = ["tick", "hello", "saved", "files", "follow", "rtc", "comments"] as const;
+export const COLLAB_EVENTS = [
+  "tick",
+  "hello",
+  "saved",
+  "files",
+  "follow",
+  "rtc",
+  "comments",
+  "pointer",
+] as const;
 export type CollabEvent = (typeof COLLAB_EVENTS)[number];
 
 /** Presence (one entry per open editor tab, keyed by session id). */
@@ -81,6 +90,20 @@ export const rtcSchema = z.object({
   sdp: z.string().min(1).max(32_000),
 });
 export type RtcPayload = z.infer<typeof rtcSchema>;
+
+/**
+ * A viewer's pointer on a shared screen (COLLAB-8), addressed to the sharer
+ * (`request`, `stop`, `move`) or to the viewer (`allow`, `deny`). x and y are
+ * fractions of the shared picture, so any window size lines up.
+ */
+export const pointerSchema = z.object({
+  s: sessionId,
+  to: sessionId,
+  kind: z.enum(["request", "allow", "deny", "stop", "move"]),
+  x: z.number().min(0).max(1).optional(),
+  y: z.number().min(0).max(1).optional(),
+});
+export type PointerPayload = z.infer<typeof pointerSchema>;
 
 /**
  * Splits elements into batches whose JSON stays under `maxBytes`, so each
