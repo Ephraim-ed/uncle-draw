@@ -17,7 +17,12 @@ type State =
   | { kind: "loading" }
   | { kind: "ask"; details: Extract<Authorization, { authorization_id: string }> }
   | { kind: "leaving" }
-  | { kind: "failed" };
+  | { kind: "failed"; reason: string };
+
+/** What Supabase said, for the person (and for us, when they tell us). */
+function reasonOf(e: unknown): string {
+  return e instanceof Error && e.message ? e.message : String(e);
+}
 
 function hostOf(uri: string): string {
   try {
@@ -36,6 +41,7 @@ export default function OAuthConsentPage() {
   const [params] = useSearchParams();
   const id = params.get("authorization_id") ?? "";
   const [state, setState] = useState<State>({ kind: "loading" });
+  const [attempt, setAttempt] = useState(0);
   useDocumentTitle("Connect an app");
 
   useEffect(() => {
@@ -51,30 +57,58 @@ export default function OAuthConsentPage() {
           goTo(details.redirect_url);
         }
       },
-      () => {
-        if (!cancelled) setState({ kind: "failed" });
+      (e: unknown) => {
+        if (!cancelled) setState({ kind: "failed", reason: reasonOf(e) });
       },
     );
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, attempt]);
 
   const answer = (approve: boolean) => {
     setState({ kind: "leaving" });
-    (approve ? approveAuthorization(id) : denyAuthorization(id)).then(goTo, () =>
-      setState({ kind: "failed" }),
+    (approve ? approveAuthorization(id) : denyAuthorization(id)).then(goTo, (e: unknown) =>
+      setState({ kind: "failed", reason: reasonOf(e) }),
     );
   };
 
-  if (!id || state.kind === "failed") {
+  if (!id) {
     return (
       <FullPageMessage
         doodle={<TornPaperDoodle width={220} />}
-        title={!id ? "This sign-in link isn't complete." : "This sign-in request has expired."}
+        title="This sign-in link isn't complete."
         actions={<SketchLinkButton to="/boards">Back to boards</SketchLinkButton>}
       >
         Start connecting again from the app that sent you here.
+      </FullPageMessage>
+    );
+  }
+  if (state.kind === "failed") {
+    return (
+      <FullPageMessage
+        doodle={<TornPaperDoodle width={220} />}
+        title="We couldn't open this sign-in request."
+        actions={
+          <>
+            <SketchButton
+              variant="primary"
+              onClick={() => {
+                setState({ kind: "loading" });
+                setAttempt((a) => a + 1);
+              }}
+            >
+              Try again
+            </SketchButton>
+            <SketchLinkButton to="/boards">Back to boards</SketchLinkButton>
+          </>
+        }
+      >
+        <p>
+          It may have expired. If trying again doesn&apos;t help, start connecting again from the app that
+          sent you here.
+        </p>
+        <p className="mt-2 text-label">Supabase said: {state.reason}</p>
       </FullPageMessage>
     );
   }

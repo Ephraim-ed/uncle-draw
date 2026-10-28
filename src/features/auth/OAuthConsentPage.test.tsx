@@ -78,10 +78,22 @@ describe("OAuthConsentPage", () => {
     expect(api.getAuthorization).not.toHaveBeenCalled();
   });
 
-  it("a request that fails to load says so and offers a way back", async () => {
-    api.getAuthorization.mockRejectedValue(new Error("expired"));
+  it("a request that fails to load says why, and can be tried again", async () => {
+    api.getAuthorization.mockRejectedValueOnce(new Error("authorization request not found or expired"));
     open();
-    expect(await screen.findByText("This sign-in request has expired.")).toBeInTheDocument();
+    expect(await screen.findByText("We couldn't open this sign-in request.")).toBeInTheDocument();
+    expect(screen.getByText(/authorization request not found or expired/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Back to boards" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByRole("button", { name: "Allow" })).toBeInTheDocument();
+    expect(api.getAuthorization).toHaveBeenCalledTimes(2);
+  });
+
+  it("a failed Allow says why instead of claiming the request expired", async () => {
+    api.approveAuthorization.mockRejectedValueOnce(new Error("invalid redirect"));
+    open();
+    await userEvent.click(await screen.findByRole("button", { name: "Allow" }));
+    expect(await screen.findByText(/invalid redirect/)).toBeInTheDocument();
+    expect(api.goTo).not.toHaveBeenCalled();
   });
 });
