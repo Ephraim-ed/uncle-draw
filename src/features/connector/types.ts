@@ -30,4 +30,6 @@ export const LIMITS = {
   rows: 100,
   cols: 26,
   items: 100,
+  /** A note item or a table cell. */
+  text: 1000,
 } as const;

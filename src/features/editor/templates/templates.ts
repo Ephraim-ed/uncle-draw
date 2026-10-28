@@ -30,6 +30,8 @@ export interface Node {
   /** Override the kind's size (a long label needs a bigger box). */
   w?: number;
   h?: number;
+  /** Left-aligned label, from the top (a note of bullets). */
+  align?: "left";
 }
 export interface Link {
   from: string;
@@ -64,6 +66,10 @@ interface TableSpec {
   rowHeight: number;
   header: readonly string[];
   rows: readonly (readonly string[])[];
+  /** The header row's height, when it isn't `rowHeight`. */
+  headerHeight?: number;
+  /** Shade the first column like the header (the default). */
+  firstColumn?: boolean;
 }
 
 export type TemplateCategory = "Flowcharts" | "Planning" | "Diagrams";
@@ -537,6 +543,7 @@ export function buildTemplate(
               fontSize: n.kind === "note" ? 18 : 20,
               fontFamily: style.fontFamily,
               strokeColor: style.strokeColor,
+              ...(n.align ? { textAlign: n.align, verticalAlign: "top" } : {}),
             },
           }
         : {}),
@@ -622,12 +629,15 @@ function buildTable(spec: TableSpec, dx: number, dy: number, style: TemplateStyl
     font,
   );
   p.colW = [...spec.widths];
+  if (spec.headerHeight) resizeRow(p, 0, spec.headerHeight);
   spec.rows.forEach((_, i) => resizeRow(p, i + 1, spec.rowHeight));
   fill(p, 0, 0, [spec.header, ...spec.rows]);
-  highlight(
-    p,
-    spec.rows.map((_, i) => ({ row: i + 1, col: 0 })),
-    DEFAULT_HEADER_FILL,
-  );
+  if (spec.firstColumn !== false) {
+    highlight(
+      p,
+      spec.rows.map((_, i) => ({ row: i + 1, col: 0 })),
+      DEFAULT_HEADER_FILL,
+    );
+  }
   return commit([], p, excalidrawText) ?? [];
 }

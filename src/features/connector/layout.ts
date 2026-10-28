@@ -48,14 +48,14 @@ const PAD = 10;
 const CHAR_EM = 0.6;
 
 /** Width in characters of `line`, counting CJK and emoji as wide. */
-function textUnits(line: string): number {
+export function textUnits(line: string): number {
   let units = 0;
   for (const ch of line) units += ch.codePointAt(0)! >= 0x1100 ? 1 / CHAR_EM : 1;
   return units;
 }
 
 /** The kind's size, grown so `label` fits: wider first (up to 2×), then taller. */
-function fitSize(
+export function fitSize(
   kind: FlowKind,
   label: string | undefined,
   maxW = 2 * SIZE[kind].w,
