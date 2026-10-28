@@ -79,6 +79,12 @@ This doc lists what Uncle Draw does, for whom, and when. Each feature has an ID,
 | COLLAB-7 | Screen sharing | v2 | P2 |
 | HIST-1 | Version history and restore | v2 | P1 |
 | CMT-1 | Comments on the canvas | v2 | P2 |
+| AI-1 | Connect Claude and sign in | v2 | P1 |
+| AI-2 | Claude draws charts, tables and notes | v2 | P1 |
+| AI-3 | Claude reads a board | v2 | P1 |
+| AI-4 | Claude tidies a board | v2 | P1 |
+| AI-5 | Put a board back | v2 | P1 |
+| AI-6 | Claude's changes show up live | v2 | P1 |
 
 ---
 
@@ -415,11 +421,69 @@ Specified at a high level now; it gets detailed acceptance criteria when v2 plan
 
 ---
 
-## 10. Non-goals
+## 10. Claude connector (AI)
+
+Decided 2026-10-28 (design: `docs/superpowers/specs/2026-10-28-claude-connector-design.md`). People chat with Claude in claude.ai and ask it to make tables and flowchart-style charts on their boards, and to tidy messy ones. Uncle Draw itself has no AI: Claude works on boards through a connector (a remote MCP server), on each person's own Claude plan.
+
+### AI-1 · Connect Claude and sign in · v2 · P1
+*As a user, I want to connect Claude to my Uncle Draw account, so it can work on my boards.*
+- In claude.ai, add a custom connector with the address `https://<app>/api/mcp`. Claude sends me to Uncle Draw to sign in (as usual), then to a page that says "Claude wants to use Uncle Draw as you" with **Allow** and **Cancel**.
+- Claude can then list my boards (mine and shared with me), create boards and get a board's view or edit link (owner only).
+
+Acceptance:
+- [ ] Claude reaches exactly the boards I can edit in the app; another person's board, a trashed board and a made-up id all answer "Board not found, or you don't have access to it."
+- [ ] Without a valid sign-in, the connector answers 401 and points Claude at Uncle Draw's sign-in.
+- [ ] Cancel sends me back to Claude without access.
+
+### AI-2 · Claude draws charts, tables and notes · v2 · P1
+*As a user, I want Claude to build the charts and tables I'd otherwise draw by hand.*
+- **Charts:** flowcharts (down or across), swimlanes, mind maps, org charts, timelines and kanban boards. Claude names the steps and links; Uncle Draw lays them out.
+- **Tables:** a real table (EDIT-7) with a header row, columns sized to their text.
+- **Notes:** a sticky note with an optional title and a bullet per item.
+- Each goes into free space to the right of what's there, or into a named area (a frame), which grows to fit.
+
+Acceptance:
+- [ ] Charts look and behave like templates (EDIT-8): ordinary shapes, bound arrows, and the "+" buttons and lane tools work on them.
+- [ ] Nothing new lands on top of what's already on the board.
+- [ ] Table cells and chart labels are exactly what Claude was given.
+
+### AI-3 · Claude reads a board · v2 · P1
+- Claude sees the board as units: charts (with their links as text, e.g. "Start → Sign up"), tables (rows of cells), frames, loose text, shapes, groups and images, each with an id, position and size.
+
+Acceptance:
+- [ ] A chart is one unit with all its shapes, arrows and labels; a shape and its label are one unit.
+- [ ] A very large board is cut off at a unit boundary with a note saying how many units weren't shown.
+
+### AI-4 · Claude tidies a board · v2 · P1
+*As a user, I want Claude to sort out a messy board: scattered notes, overlapping charts.*
+- Claude first lists, in chat, the topics it would make, what goes in each, and how loose text becomes bullets or a table. It waits for my OK.
+- Then each topic becomes a frame named after it: charts down the left, notes beside them, tables below. Frames sit in rows with nothing overlapping. Anything not given a topic goes in "Misc". Locked things stay where they are.
+
+Acceptance:
+- [ ] A plan that doesn't fit the board (an unknown unit, one unit in two topics, a locked unit) changes nothing and says why.
+- [ ] Charts move as a whole, arrows and labels included; my words in notes are kept.
+
+### AI-5 · Put a board back · v2 · P1
+- Before tidying, deleting or restoring, Uncle Draw saves the board (the newest 20 per board are kept). Claude can list these and put the board back, which removes anything added since.
+
+Acceptance:
+- [ ] After a restore, everyone with the board open sees it exactly as it was in the snapshot.
+- [ ] Only the owner and editors can see or use a board's snapshots.
+
+### AI-6 · Claude's changes show up live · v2 · P1
+- If I have the board open, Claude's changes appear as it makes them, like a collaborator's, with a "Claude updated this board." notice. Text Claude adds is measured again in my editor with the real fonts, so labels sit in the middle of their shapes.
+
+Acceptance:
+- [ ] My own edits made at the same moment are kept: Claude's write retries on top of them.
+- [ ] Claude's changes don't go into my undo history.
+
+---
+
+## 11. Non-goals
 
 Not planned for any milestone above unless this doc is updated:
 - Teams, workspaces, folders, billing or paid plans.
-- AI features (text-to-diagram, auto-layout, image generation).
+- AI features inside the app (text-to-diagram buttons, image generation). The Claude connector (§10) is the exception, decided 2026-10-28: Claude works on boards from claude.ai, and the app itself has no AI.
 - Native mobile or desktop apps (the web app is responsive and installable later as a PWA).
 - Guest or anonymous editing without an account.
 - Public galleries, search-engine-indexed boards or embedding boards on other sites.
@@ -427,7 +491,7 @@ Not planned for any milestone above unless this doc is updated:
 
 ---
 
-## 11. Open questions
+## 12. Open questions
 
 | # | Question | Affects | Proposed default |
 |---|---|---|---|
@@ -441,7 +505,7 @@ Not planned for any milestone above unless this doc is updated:
 
 ---
 
-## 12. Definition of done for v1
+## 13. Definition of done for v1
 
 - [ ] Every v1 **P0** feature meets all of its acceptance criteria.
 - [ ] The E2E flow in tech §14 passes in CI against local Supabase.
