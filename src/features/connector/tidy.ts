@@ -74,6 +74,11 @@ function check(plan: TidyPlan, units: Map<string, Unit>) {
     if (replacing && unit.kind !== "text") {
       throw new ConnectorError(`Only loose text can become notes or a table; "${id}" is a ${unit.kind}.`);
     }
+    if (replacing && unit.cut) {
+      throw new ConnectorError(
+        `"${id}" is longer than read_board shows, so rewriting it would lose text. Move it as a unit instead.`,
+      );
+    }
   };
   for (const topic of plan.topics) {
     const name = topic.name.trim();
@@ -182,8 +187,17 @@ function rows(sizes: { w: number; h: number }[], origin: { x: number; y: number 
   return out;
 }
 
-/** The tidied board. Throws ConnectorError, changing nothing, if the plan doesn't fit the board. */
-export function applyTidy(elements: readonly El[], plan: TidyPlan): Change {
+/**
+ * The tidied board. Throws ConnectorError, changing nothing, if the plan
+ * doesn't fit the board. With `leaveUnassigned` (a board too big for Claude
+ * to read in one go), units the plan leaves out stay where they are instead
+ * of going in "Misc", and new frames keep clear of them.
+ */
+export function applyTidy(
+  elements: readonly El[],
+  plan: TidyPlan,
+  opts: { leaveUnassigned?: boolean } = {},
+): Change {
   const units = describeUnits(elements);
   const byUnit = new Map(units.map((u) => [u.id, u]));
   check(plan, byUnit);
@@ -195,7 +209,7 @@ export function applyTidy(elements: readonly El[], plan: TidyPlan): Change {
   const leftovers = units
     .filter((u) => u.kind !== "frame" && !u.locked && !claimed.has(u.id))
     .map((u) => u.id);
-  if (leftovers.length > 0) {
+  if (leftovers.length > 0 && !opts.leaveUnassigned) {
     const misc = topics.find((t) => t.name === MISC);
     if (misc) misc.units.push(...leftovers);
     else topics.push({ name: MISC, units: leftovers });
@@ -211,14 +225,17 @@ export function applyTidy(elements: readonly El[], plan: TidyPlan): Change {
 
   const byId = new Map(elements.map((el) => [el.id, el]));
   const present = elements.filter((el) => !el.isDeleted);
-  const lockedIds = new Set(units.filter((u) => u.locked).flatMap((u) => u.elementIds));
-  // Frames that keep locked contents (or are locked) stay, and new frames avoid them.
+  const staying = units.filter(
+    (u) => u.kind !== "frame" && (u.locked || (opts.leaveUnassigned && leftovers.includes(u.id))),
+  );
+  const stayingIds = new Set(staying.flatMap((u) => u.elementIds));
+  // Frames that keep contents (locked, or left in place) or are locked stay, and new frames avoid them.
   const keptFrames = units.filter(
     (u) =>
       u.kind === "frame" &&
-      (u.locked || present.some((el) => el.frameId === u.elementIds[0] && lockedIds.has(el.id))),
+      (u.locked || present.some((el) => el.frameId === u.elementIds[0] && stayingIds.has(el.id))),
   );
-  const obstacles = [...units.filter((u) => u.locked && u.kind !== "frame"), ...keptFrames].map((u) => ({
+  const obstacles = [...staying, ...keptFrames].map((u) => ({
     x: u.bounds.x,
     y: u.bounds.y,
     w: u.bounds.width,

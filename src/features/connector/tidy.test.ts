@@ -243,4 +243,23 @@ describe("applyTidy", () => {
   ] as [string, TidyPlan, El[]][])("rejects %s with ConnectorError and no change", (_, p, els) => {
     expect(() => applyTidy(els, p)).toThrow(ConnectorError);
   });
+
+  test("with leaveUnassigned, things not in a topic stay put and new frames avoid them", () => {
+    const { elements } = applyTidy(scene, plan(topic("Sign-up", { units: [A] })), { leaveUnassigned: true });
+    for (const id of [chartB[0]!.id, "t1", "t2", "loose"]) {
+      const before = byId(scene, id);
+      const after = byId(elements, id);
+      expect([after.x, after.y, after.frameId]).toEqual([before.x, before.y, before.frameId]);
+    }
+    expect(framesOf(elements).map((f) => (f.type === "frame" ? f.name : ""))).toEqual(["Sign-up"]);
+    const stayed = box(elements.filter((el) => chartB.some((c) => c.id === el.id)));
+    expect(overlaps(frameBox(frameNamed(elements, "Sign-up")), stayed)).toBe(false);
+  });
+
+  test("won't rewrite text that read_board only showed part of", () => {
+    const long = board([...scene, text("essay", 0, 2000, "word ".repeat(600))]);
+    expect(() =>
+      applyTidy(long, plan(topic("Notes", { notes: { replaces: ["text:essay"], items: ["word word"] } }))),
+    ).toThrow(ConnectorError);
+  });
 });

@@ -6,7 +6,7 @@ import { chartTemplate } from "../../src/features/connector/layout";
 import { addTemplate, type Change } from "../../src/features/connector/place";
 import { applyTidy } from "../../src/features/connector/tidy";
 import { ConnectorError, LIMITS } from "../../src/features/connector/types";
-import { describeUnits, outline } from "../../src/features/connector/units";
+import { describeUnits, fitsOutline, outline } from "../../src/features/connector/units";
 import type { BoardInfo, BoardStore } from "./boardStore";
 
 /**
@@ -174,13 +174,34 @@ export function registerTools(server: McpServer, store: BoardStore): void {
     {
       title: "Read a board",
       description:
-        "What's on a board, as units: charts (with their links as text), tables, frames, loose text, shapes, groups and images. Each has an id, position, size and text. Use the ids with apply_tidy and delete_elements.",
-      inputSchema: { board_id: boardId },
+        "What's on a board, as units: charts (with their links as text), tables, frames, loose text, shapes, groups and images. Each has an id, position, size and text. Use the ids with apply_tidy and delete_elements. A big board comes in parts: carry on with `from`, or read one area (frame) at a time.",
+      inputSchema: {
+        board_id: boardId,
+        area: z.string().max(200).optional().describe("Only what's in the frame with this name."),
+        from: z
+          .number()
+          .int()
+          .min(0)
+          .optional()
+          .describe("Start at this unit, to read the rest of a big board."),
+      },
       annotations: { readOnlyHint: true },
     },
-    safely(async ({ board_id }) => {
+    safely(async ({ board_id, area: name, from }) => {
       const { info, elements } = await store.read(board_id);
-      return `"${info.title}": ${info.url}\n\n${outline(describeUnits(elements))}`;
+      let units = describeUnits(elements);
+      if (name) {
+        const frames = units.filter((u) => u.kind === "frame").map((u) => u.text);
+        if (!frames.includes(name)) {
+          throw new ConnectorError(
+            frames.length > 0
+              ? `There's no area called "${name}". Areas on this board: ${frames.map((f) => `"${f}"`).join(", ")}.`
+              : `There's no area called "${name}"; this board has no frames.`,
+          );
+        }
+        units = units.filter((u) => u.frame === name || (u.kind === "frame" && u.text === name));
+      }
+      return `"${info.title}": ${info.url}\n\n${outline(units, undefined, from)}`;
     }),
   );
 
@@ -254,15 +275,25 @@ export function registerTools(server: McpServer, store: BoardStore): void {
     {
       title: "Tidy a board",
       description:
-        "Rearranges a board into one frame per topic: charts down the left, notes beside them, tables below, nothing overlapping. Loose text listed in notes.replaces or table.replaces is replaced by those notes or that table. Units left out go in a Misc frame; locked things stay put. Only call after you have shown the user the topics, which units go in each, and how loose text becomes notes or a table, and the user has agreed. Keep the user's wording in notes; never reword chart labels or table cells. A snapshot is saved first.",
+        "Rearranges a board into one frame per topic: charts down the left, notes beside them, tables below, nothing overlapping. Loose text listed in notes.replaces or table.replaces is replaced by those notes or that table. Units left out go in a Misc frame (on a board too big to read in one go, they stay where they are); locked things stay put. Only call after you have shown the user the topics, which units go in each, and how loose text becomes notes or a table, and the user has agreed. Keep the user's wording in notes; never reword chart labels or table cells. A snapshot is saved first.",
       inputSchema: { board_id: boardId, plan: tidyPlan },
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
     },
     safely(async ({ board_id, plan }) => {
-      const { info, change } = await store.mutate(board_id, (els) => applyTidy(els, plan), {
-        snapshot: "Before tidying",
-      });
-      return done("Tidied the board", info, change);
+      let big = false;
+      const { info, change } = await store.mutate(
+        board_id,
+        (els) => {
+          // Claude may not have seen all of a big board, so what it left out stays put.
+          big = !fitsOutline(describeUnits(els));
+          return applyTidy(els, plan, { leaveUnassigned: big });
+        },
+        { snapshot: "Before tidying" },
+      );
+      const note = big
+        ? "\nThe board is too big to read in one go, so things not in a topic were left where they were."
+        : "";
+      return done("Tidied the board", info, change) + note;
     }),
   );
 

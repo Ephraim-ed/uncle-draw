@@ -4,7 +4,7 @@ import { describe, expect, test } from "vitest";
 import { buildTemplate, TEMPLATES } from "../editor/templates/templates";
 import { tableTemplate } from "./blocks";
 import { addTemplate, DEFAULT_STYLE } from "./place";
-import { describeUnits, outline } from "./units";
+import { describeUnits, fitsOutline, outline } from "./units";
 
 const template = (id: string) => TEMPLATES.find((t) => t.id === id)!;
 const build = (id: string, x = 0, y = 0) => buildTemplate(template(id), { x, y }, DEFAULT_STYLE);
@@ -167,9 +167,39 @@ describe("outline", () => {
     const units = describeUnits(els);
     const out = outline(units);
     expect(out.length).toBeLessThanOrEqual(100_000);
-    const cut = /… (\d+) more units not shown\. Ask for a smaller area\.$/.exec(out);
+    const cut = /… (\d+) more units not shown\. Call read_board again with from: (\d+)\.$/.exec(out);
     expect(cut).not.toBeNull();
     const shown = out.split("\n").filter((line) => line.startsWith("[")).length;
     expect(shown + Number(cut![1])).toBe(5000);
+  });
+});
+
+describe("reading a big board in parts", () => {
+  const many = () =>
+    describeUnits(
+      Array.from({ length: 5000 }, (_, i) =>
+        text(`t${String(i).padStart(4, "0")}`, (i % 50) * 300, Math.floor(i / 50) * 80, `Loose note number ${i} with a few words`),
+      ),
+    );
+
+  test("from picks up where the last outline stopped", () => {
+    const units = many();
+    const first = outline(units);
+    const next = Number(/with from: (\d+)\.$/.exec(first)![1]);
+    const second = outline(units, undefined, next);
+    expect(second.split("\n")[0]).toContain(`[${units[next]!.id}]`);
+    expect(first).not.toContain(`[${units[next]!.id}]`);
+  });
+
+  test("fitsOutline says whether one outline shows everything", () => {
+    expect(fitsOutline(many())).toBe(false);
+    expect(fitsOutline(describeUnits([text("a", 0, 0, "hello")]))).toBe(true);
+  });
+
+  test("a text cut short in the outline is marked as cut", () => {
+    const [long] = describeUnits([text("long", 0, 0, "word ".repeat(600))]);
+    expect(long!.cut).toBe(true);
+    expect(long!.text.endsWith("…")).toBe(true);
+    expect(describeUnits([text("short", 0, 0, "hi")])[0]!.cut).toBeUndefined();
   });
 });

@@ -20,6 +20,8 @@ export interface Unit {
   locked: boolean;
   /** The name of the frame it sits in. */
   frame?: string;
+  /** `text` was cut short (the full text is longer than read_board shows). */
+  cut?: true;
 }
 
 type El = ExcalidrawElement;
@@ -99,6 +101,7 @@ function unit(kind: UnitKind, els: readonly El[], text: string): Unit {
     bounds: { x: Math.round(x1), y: Math.round(y1), width: Math.round(x2 - x1), height: Math.round(y2 - y1) },
     text: text.length > UNIT_TEXT_MAX ? `${text.slice(0, UNIT_TEXT_MAX)}…` : text,
     locked: els.some((el) => el.locked),
+    ...(text.length > UNIT_TEXT_MAX ? { cut: true as const } : {}),
   };
 }
 
@@ -165,29 +168,47 @@ function tableText(els: readonly El[]): string {
     .join("\n");
 }
 
-/** The units as text for Claude, cut at a unit boundary to stay under `maxChars`. */
-export function outline(units: readonly Unit[], maxChars = DEFAULT_MAX_CHARS): string {
-  if (units.length === 0) return "The board is empty.";
-  const footerRoom = 80;
-  const blocks: string[] = [];
+function block(u: Unit): string {
+  const { x, y, width, height } = u.bounds;
+  const head = `[${u.id}] ${u.kind} @${x},${y} ${width}×${height}${u.locked ? " (locked)" : ""}${u.frame ? ` in "${u.frame}"` : ""}`;
+  if (u.kind === "frame" || !u.text) return head;
+  return `${head}\n${u.text
+    .split("\n")
+    .map((line) => `  ${line}`)
+    .join("\n")}`;
+}
+
+const FOOTER_ROOM = 120;
+
+/** How many units, from `from`, fit in one outline. */
+function fitting(units: readonly Unit[], maxChars: number, from: number): number {
   let length = 0;
-  for (const u of units) {
-    const { x, y, width, height } = u.bounds;
-    const head = `[${u.id}] ${u.kind} @${x},${y} ${width}×${height}${u.locked ? " (locked)" : ""}${u.frame ? ` in "${u.frame}"` : ""}`;
-    const body =
-      u.kind === "frame" || !u.text
-        ? ""
-        : `\n${u.text
-            .split("\n")
-            .map((line) => `  ${line}`)
-            .join("\n")}`;
-    const block = head + body;
-    if (length + block.length + 1 > maxChars - footerRoom) {
-      const rest = units.length - blocks.length;
-      return `${blocks.join("\n")}\n… ${rest} more units not shown. Ask for a smaller area.`;
-    }
-    blocks.push(block);
-    length += block.length + 1;
+  for (let i = from; i < units.length; i++) {
+    length += block(units[i]!).length + 1;
+    if (length > maxChars - FOOTER_ROOM) return i - from;
   }
-  return blocks.join("\n");
+  return units.length - from;
+}
+
+/**
+ * The units as text for Claude, starting at unit `from`, cut at a unit
+ * boundary to stay under `maxChars`; the footer says where to carry on.
+ */
+export function outline(units: readonly Unit[], maxChars = DEFAULT_MAX_CHARS, from = 0): string {
+  if (units.length === 0) return "The board is empty.";
+  if (from >= units.length) return `That's past the last unit: the board has ${units.length}.`;
+  const shown = Math.max(1, fitting(units, maxChars, from));
+  const text = units
+    .slice(from, from + shown)
+    .map(block)
+    .join("\n");
+  const rest = units.length - from - shown;
+  return rest > 0
+    ? `${text}\n… ${rest} more units not shown. Call read_board again with from: ${from + shown}.`
+    : text;
+}
+
+/** Whether one outline shows the whole board. */
+export function fitsOutline(units: readonly Unit[], maxChars = DEFAULT_MAX_CHARS): boolean {
+  return fitting(units, maxChars, 0) === units.length;
 }

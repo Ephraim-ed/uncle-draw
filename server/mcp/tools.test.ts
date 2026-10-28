@@ -188,6 +188,28 @@ describe("tools", () => {
     expect(out).toContain(board.url);
   });
 
+  test("read_board can read one area, or carry on from a unit", async () => {
+    await client.callTool({
+      name: "add_notes",
+      arguments: { board_id: board.id, items: ["inside"], area: "Pricing" },
+    });
+    const area = textOf(
+      await client.callTool({ name: "read_board", arguments: { board_id: board.id, area: "Pricing" } }),
+    );
+    expect(area).toContain("inside");
+    expect(area).not.toContain("call Sam");
+    const missing = await client.callTool({
+      name: "read_board",
+      arguments: { board_id: board.id, area: "Nope" },
+    });
+    expect(missing.isError).toBe(true);
+    expect(textOf(missing)).toContain("Pricing");
+    const rest = textOf(
+      await client.callTool({ name: "read_board", arguments: { board_id: board.id, from: 1 } }),
+    );
+    expect(rest).not.toContain("[text:t1]");
+  });
+
   test("apply_tidy with a bad plan returns isError and leaves the store untouched", async () => {
     const before = store.boards.get(board.id)!.elements;
     const result = await client.callTool({
