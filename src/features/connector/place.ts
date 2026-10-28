@@ -13,6 +13,7 @@ import {
   type TemplateStyle,
 } from "../editor/templates/templates";
 import { markForMeasure } from "./marks";
+import { ConnectorError } from "./types";
 
 /**
  * Putting what Claude makes on the board (AI-2): in free space to the right
@@ -116,16 +117,36 @@ export function addTemplate(
     return finish(elements, [], [...markForMeasure(built).map((el) => ({ ...el, frameId: box.id })), box]);
   }
 
+  // Below what's in the area, or else beside it; the area grows to fit, but never over anything else.
   const inside = live(elements).filter((el) => el.frameId === frame.id);
-  const top = inside.length > 0 ? getCommonBounds(inside)[3] + STACK_GAP : frame.y + FRAME_PAD;
-  const at = { x: frame.x + FRAME_PAD, y: Math.round(top) };
-  const built = markForMeasure(buildTemplate(t, at, DEFAULT_STYLE)).map((el) => ({
-    ...el,
-    frameId: frame.id,
-  }));
-  const grown = newElementWith(frame, {
-    width: Math.max(frame.width, at.x + b.width + FRAME_PAD - frame.x),
-    height: Math.max(frame.height, at.y + b.height + FRAME_PAD - frame.y),
-  });
-  return finish(elements, [grown], built);
+  const [, , right, bottom] = inside.length > 0 ? getCommonBounds(inside) : [0, 0, frame.x, frame.y];
+  const spots = [
+    { x: frame.x + FRAME_PAD, y: Math.round(inside.length > 0 ? bottom + STACK_GAP : frame.y + FRAME_PAD) },
+    ...(inside.length > 0 ? [{ x: Math.round(right + STACK_GAP), y: frame.y + FRAME_PAD }] : []),
+  ];
+  const others = live(elements).filter((el) => el.id !== frame.id && el.frameId !== frame.id);
+  for (const at of spots) {
+    const size = {
+      width: Math.max(frame.width, at.x + b.width + FRAME_PAD - frame.x),
+      height: Math.max(frame.height, at.y + b.height + FRAME_PAD - frame.y),
+    };
+    const box = { x1: frame.x, y1: frame.y, x2: frame.x + size.width, y2: frame.y + size.height };
+    if (others.some((el) => overlapsBox(el, box))) continue;
+    const built = markForMeasure(buildTemplate(t, at, DEFAULT_STYLE)).map((el) => ({
+      ...el,
+      frameId: frame.id,
+    }));
+    return finish(elements, [newElementWith(frame, size)], built);
+  }
+  throw new ConnectorError(
+    `There's no room to grow "${opts.area}" without covering other things. Tidy the board first, or put it somewhere else.`,
+  );
+}
+
+function overlapsBox(
+  el: ExcalidrawElement,
+  box: { x1: number; y1: number; x2: number; y2: number },
+): boolean {
+  const [x1, y1, x2, y2] = getCommonBounds([el]);
+  return x1 < box.x2 && box.x1 < x2 && y1 < box.y2 && box.y1 < y2;
 }

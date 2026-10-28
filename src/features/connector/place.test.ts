@@ -2,7 +2,8 @@ import { convertToExcalidrawElements, getCommonBounds } from "@excalidraw/excali
 import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
 import { describe, expect, test } from "vitest";
 import { TEMPLATES } from "../editor/templates/templates";
-import { notesTemplate } from "./blocks";
+import { notesTemplate, tableTemplate } from "./blocks";
+import { ConnectorError } from "./types";
 import { chartTemplate } from "./layout";
 import { MEASURE_KEY } from "./marks";
 import { addTemplate, freeSpot, newFrame } from "./place";
@@ -126,4 +127,39 @@ test("a chart's title is centred over it and stays inside its area", () => {
   expect(title.x + title.width / 2).toBeCloseTo((chart.x1 + chart.x2) / 2, 0);
   expect(title.x).toBeGreaterThanOrEqual(frame.x);
   expect(title.x + title.width).toBeLessThanOrEqual(frame.x + frame.width);
+});
+
+describe("growing an area next to other things", () => {
+  const frameOf = (els: readonly ExcalidrawElement[], name: string) =>
+    els.find((el) => el.type === "frame" && el.name === name && !el.isDeleted)!;
+  const box = (el: ExcalidrawElement) => ({ x1: el.x, y1: el.y, x2: el.x + el.width, y2: el.y + el.height });
+  /** "Left" with a note, and "Right" 120 px to its right. */
+  function twoAreas() {
+    let scene = addTemplate([], notesTemplate("A", ["one", "two"]), { area: "Left" }).elements;
+    const left = frameOf(scene, "Left");
+    scene = [...scene, rect("neighbour", left.x + left.width + 120, left.y, 300, 600)];
+    return scene;
+  }
+
+  test("a narrow addition grows the area downward without touching its neighbour", () => {
+    const scene = twoAreas();
+    const { elements } = addTemplate(scene, notesTemplate("B", ["three"]), { area: "Left" });
+    expect(overlap(box(frameOf(elements, "Left")), box(elements.find((el) => el.id === "neighbour")!))).toBe(false);
+  });
+
+  test("a wide addition that would cover the neighbour is refused, changing nothing", () => {
+    const scene = twoAreas();
+    const wide = tableTemplate(["Name", "Description of the thing", "Owner", "Due"], [["a", "b".repeat(30), "c", "d"]]);
+    expect(() => addTemplate(scene, wide, { area: "Left" })).toThrow(ConnectorError);
+  });
+
+  test("with something below the area, the addition goes beside what's in it", () => {
+    let scene = addTemplate([], notesTemplate("A", ["one"]), { area: "Top" }).elements;
+    const top = frameOf(scene, "Top");
+    scene = [...scene, rect("below", top.x, top.y + top.height + 60, 400, 200)];
+    const { elements } = addTemplate(scene, notesTemplate("B", ["two"]), { area: "Top" });
+    const grown = frameOf(elements, "Top");
+    expect(overlap(box(grown), box(elements.find((el) => el.id === "below")!))).toBe(false);
+    expect(grown.width).toBeGreaterThan(top.width);
+  });
 });
