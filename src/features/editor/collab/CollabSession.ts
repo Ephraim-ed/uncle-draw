@@ -37,6 +37,7 @@ import {
 import { ScreenShare, type ScreenMedia, type ScreenStatus } from "./ScreenShare";
 import type { CollabTransport, ConnectFn } from "./transport";
 import { VoiceChat, type VoiceMedia, type VoiceStatus } from "./VoiceChat";
+import { CONNECTOR_SESSION_PREFIX } from "../../connector/marks";
 
 /** The parts of Excalidraw's API the session uses (a fake in tests). */
 export type CollabApi = Pick<
@@ -582,7 +583,13 @@ export class CollabSession {
     switch (event) {
       case "tick": {
         const msg = tickSchema.safeParse(raw);
-        if (msg.success && msg.data.s !== this.o.sessionId) this.applyTick(msg.data);
+        if (msg.success && msg.data.s !== this.o.sessionId) {
+          this.applyTick(msg.data);
+          // The Claude connector's edits (AI-6) arrive like a collaborator's; say who made them.
+          if (msg.data.s.startsWith(CONNECTOR_SESSION_PREFIX) && msg.data.e?.length) {
+            this.o.notify?.("Claude updated this board.");
+          }
+        }
         return;
       }
       case "hello": {

@@ -1,0 +1,11 @@
+{
+  // The connector's server (AI-1). It reuses app code from src/, so it shares
+  // the app's settings and Excalidraw type paths, plus Node types.
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.server.tsbuildinfo",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": ["node", "vite/client"]
+  },
+  "include": ["server", "api"]
+}

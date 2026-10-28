@@ -17,9 +17,9 @@ import { excalidrawText } from "../table/textEngine";
  * afterwards (flow/flow.ts).
  */
 
-type Side = "top" | "bottom" | "left" | "right";
+export type Side = "top" | "bottom" | "left" | "right";
 
-interface Node {
+export interface Node {
   id: string;
   kind: FlowKind;
   x: number;
@@ -27,8 +27,13 @@ interface Node {
   label?: string;
   /** Overrides the kind's fill. */
   fill?: string;
+  /** Override the kind's size (a long label needs a bigger box). */
+  w?: number;
+  h?: number;
+  /** Left-aligned label, from the top (a note of bullets). */
+  align?: "left";
 }
-interface Link {
+export interface Link {
   from: string;
   fromSide: Side;
   to: string;
@@ -61,6 +66,10 @@ interface TableSpec {
   rowHeight: number;
   header: readonly string[];
   rows: readonly (readonly string[])[];
+  /** The header row's height, when it isn't `rowHeight`. */
+  headerHeight?: number;
+  /** Shade the first column like the header (the default). */
+  firstColumn?: boolean;
 }
 
 export type TemplateCategory = "Flowcharts" | "Planning" | "Diagrams";
@@ -80,7 +89,7 @@ export interface Template {
   table?: TableSpec;
 }
 
-const SIZE: Record<FlowKind, { w: number; h: number }> = {
+export const SIZE: Record<FlowKind, { w: number; h: number }> = {
   terminal: { w: 160, h: 64 },
   step: { w: 180, h: 72 },
   decision: { w: 200, h: 120 },
@@ -140,7 +149,7 @@ const down = (from: string, to: string, label?: string) => link(from, "bottom", 
 const right = (from: string, to: string, label?: string) => link(from, "right", to, "left", { label });
 
 /** Board columns with sticky notes: headers at the top, notes stacked below. */
-function columns(
+export function columns(
   heads: readonly string[],
   cards: readonly (readonly string[])[],
   fills: readonly string[],
@@ -421,7 +430,7 @@ export interface TemplateStyle {
 /** Gap between an arrow's end and its shape, like Excalidraw's own bindings. */
 const GAP = 6;
 
-const sizeOf = (n: Node) => SIZE[n.kind];
+const sizeOf = (n: Node) => ({ w: n.w ?? SIZE[n.kind].w, h: n.h ?? SIZE[n.kind].h });
 
 function anchor(n: Node, side: Side): [number, number] {
   const { w, h } = sizeOf(n);
@@ -534,6 +543,7 @@ export function buildTemplate(
               fontSize: n.kind === "note" ? 18 : 20,
               fontFamily: style.fontFamily,
               strokeColor: style.strokeColor,
+              ...(n.align ? { textAlign: n.align, verticalAlign: "top" } : {}),
             },
           }
         : {}),
@@ -619,12 +629,15 @@ function buildTable(spec: TableSpec, dx: number, dy: number, style: TemplateStyl
     font,
   );
   p.colW = [...spec.widths];
+  if (spec.headerHeight) resizeRow(p, 0, spec.headerHeight);
   spec.rows.forEach((_, i) => resizeRow(p, i + 1, spec.rowHeight));
   fill(p, 0, 0, [spec.header, ...spec.rows]);
-  highlight(
-    p,
-    spec.rows.map((_, i) => ({ row: i + 1, col: 0 })),
-    DEFAULT_HEADER_FILL,
-  );
+  if (spec.firstColumn !== false) {
+    highlight(
+      p,
+      spec.rows.map((_, i) => ({ row: i + 1, col: 0 })),
+      DEFAULT_HEADER_FILL,
+    );
+  }
   return commit([], p, excalidrawText) ?? [];
 }

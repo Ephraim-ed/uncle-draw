@@ -509,7 +509,7 @@ Built (COLLAB-1…7). v1's choices carried over as planned; where the build diff
   - A thread on a shape follows the shape's top-right corner while it exists, and falls back to its stored spot. Markers are DOM overlays, so they never end up in exports or thumbnails.
   - After any change, the editor broadcasts **`comments`** on the board channel and collaborators reload (debounced); window focus reloads too. View-only share links don't show comments.
 - **Known limits (COLLAB-5…7):** without a TURN server (`VITE_ICE_SERVERS`), peers behind symmetric NATs or strict firewalls can't connect. Signaling trusts board editors the way presence does: an editor could claim another tab's session id. Screen sharing doesn't carry tab audio.
-- **Not built yet:** a Viewer role for members, email invites, and version history (HIST-1: `board_snapshots (board_id, version, scene, created_at)`, filled at most every 10 min while editing).
+- **Not built yet:** a Viewer role for members, email invites, and version history (HIST-1: snapshots filled at most every 10 min while editing). `board_snapshots` now exists for the Claude connector (§18); HIST-1 can add to it.
 
 ---
 
@@ -531,3 +531,17 @@ Built (COLLAB-1…7). v1's choices carried over as planned; where the build diff
 - Offline-first editing of boards never opened on this device. We only back up boards that were already opened.
 - AI features (text-to-diagram, etc.).
 - Server-side rendering and search-engine indexing of shared boards.
+
+---
+
+## 18. Claude connector (AI-1…6)
+
+Built 2026-10-28. Design: `docs/superpowers/specs/2026-10-28-claude-connector-design.md`.
+
+- **Server:** a remote MCP server (Streamable HTTP, stateless, JSON replies) at `/api/mcp`, a Vercel function (`api/mcp.js`). It loads `server-dist/mcp.mjs`, built by `npm run build:mcp` with Vite in SSR mode, everything bundled: Node can't import `@excalidraw/excalidraw` directly. `server/mcp/dom.ts` supplies just enough browser for Excalidraw's data functions, with text measured at an estimated 0.6 em per character.
+- **Board operations** live in `src/features/connector/` and reuse the app's own code: `buildTemplate` (charts, notes and tables), the table grid, `restoreElements`/`reconcileElements`. Charts are laid out by dagre (flowcharts, swimlane order) or a tidy tree (mind maps, org charts).
+- **Sign-in:** Supabase Auth's OAuth 2.1 server (beta) with dynamic client registration. The app's `/oauth/consent` asks the user. `/.well-known/oauth-protected-resource` (RFC 9728) names `<supabase>/auth/v1` as the authorization server. Requests without a valid token get 401 with `WWW-Authenticate: Bearer resource_metadata=…`. Tokens are ordinary user JWTs, so every query runs as the user under RLS; there's no service-role key on the server. Supabase doesn't support resource indicators (RFC 8707) yet, so tokens aren't bound to this server; they allow what the user can do in the app anyway.
+- **Writes:** read the board, apply the change, `save_board` with the read version; on a conflict, read again and redo the change (at most 3 tries). Tidy, delete and restore first insert a `board_snapshots` row (`board_id, created_by, reason, scene, app_state, created_at`; RLS `can_edit_board`; no update or delete; a trigger keeps the newest 20 per board).
+- **Live:** after a save, the changed elements go out as `tick` messages on `board:{id}` through Realtime's REST broadcast (`httpSend`), with session id `claude-…`. Editors merge them as usual and show "Claude updated this board."
+- **Text sizes:** elements the server made carry `customData.udMeasure`. When an editor's scene has any, it loads their fonts, measures them with `restoreElements({ refreshDimensions: true })`, re-centres labels in their shapes (growing a shape whose label no longer fits, except table cells), clears the tag and saves.
+- **Tests:** `npm run test:server` (node environment; the integration tests need local Supabase and skip otherwise) and `npm run check:mcp` (the bundle builds every template in Node). Both run in CI.
