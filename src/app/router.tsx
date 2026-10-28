@@ -14,6 +14,7 @@ import { SetupPage } from "../pages/SetupPage";
 const EditorPage = lazy(() => import("../features/editor/EditorPage"));
 const SharePage = lazy(() => import("../features/share/SharePage"));
 const JoinPage = lazy(() => import("../features/share/JoinPage"));
+const OAuthConsentPage = lazy(() => import("../features/auth/OAuthConsentPage"));
 // Dev-only component preview; `import.meta.env.DEV` is false in builds, so the chunk is dropped.
 const KitPage = import.meta.env.DEV ? lazy(() => import("../pages/KitPage")) : null;
 
@@ -61,6 +62,15 @@ export const routes: RouteObject[] = [
                 element: (
                   <Lazy label="Joining the board…">
                     <JoinPage />
+                  </Lazy>
+                ),
+              },
+              {
+                // Signing in to Uncle Draw from another app, like Claude (AI-1).
+                path: "/oauth/consent",
+                element: (
+                  <Lazy>
+                    <OAuthConsentPage />
                   </Lazy>
                 ),
               },
