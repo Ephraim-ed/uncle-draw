@@ -16,6 +16,7 @@ type El = ExcalidrawElement;
 const LABEL_PAD = 5;
 
 const tagged = (el: El) => !el.isDeleted && el.customData?.[MEASURE_KEY] === true;
+const isLine = (el: El | undefined) => el?.type === "arrow" || el?.type === "line";
 
 export function hasMeasureTag(elements: readonly El[]): boolean {
   return elements.some(tagged);
@@ -62,12 +63,13 @@ export function remeasure(elements: readonly El[]): El[] | null {
     restoreElements(input, null, { refreshDimensions: true, repairBindings: true }).map((el) => [el.id, el]),
   );
 
-  // A label that no longer fits makes its shape taller (not table cells: their row decides).
+  // A label that no longer fits makes its shape taller (not table cells: their row decides,
+  // and never an arrow, whose size is its points).
   const height = new Map<string, number>();
   for (const id of texts) {
     const text = measured.get(id) as ExcalidrawTextElement | undefined;
     const box = text?.containerId ? byId.get(text.containerId) : undefined;
-    if (!text || !box || tablePart(box)) continue;
+    if (!text || !box || tablePart(box) || isLine(box)) continue;
     const needed = text.height + 2 * LABEL_PAD;
     if (needed > box.height) height.set(box.id, Math.ceil(needed));
   }
@@ -86,14 +88,17 @@ export function remeasure(elements: readonly El[]): El[] | null {
     const text = measured.get(el.id) as ExcalidrawTextElement;
     const box = el.containerId ? byId.get(el.containerId) : undefined;
     const size = { text: text.text, width: text.width, height: text.height, lineHeight: text.lineHeight };
-    const position = box
-      ? labelPosition({ ...el, ...size } as ExcalidrawTextElement, {
-          x: box.x,
-          y: box.y,
-          width: box.width,
-          height: height.get(box.id) ?? box.height,
-        })
-      : { x: text.x, y: text.y };
+    // An arrow's label sits where Excalidraw put it on the path: keep its centre.
+    const position = isLine(box)
+      ? { x: el.x + (el.width - size.width) / 2, y: el.y + (el.height - size.height) / 2 }
+      : box
+        ? labelPosition({ ...el, ...size } as ExcalidrawTextElement, {
+            x: box.x,
+            y: box.y,
+            width: box.width,
+            height: height.get(box.id) ?? box.height,
+          })
+        : { x: text.x, y: text.y };
     out.push(newElementWith(el, { ...size, ...position, customData: untagged(el) }));
   }
   // A shape that grew but wasn't tagged itself still has to change.

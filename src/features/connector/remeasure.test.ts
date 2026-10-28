@@ -2,7 +2,9 @@ import { CaptureUpdateAction, convertToExcalidrawElements, restoreElements } fro
 import type { ExcalidrawElement, ExcalidrawTextElement } from "@excalidraw/excalidraw/element/types";
 import type { SceneData } from "@excalidraw/excalidraw/types";
 import { describe, expect, test } from "vitest";
-import { MEASURE_KEY } from "./marks";
+import { buildTemplate, TEMPLATES } from "../editor/templates/templates";
+import { MEASURE_KEY, markForMeasure } from "./marks";
+import { DEFAULT_STYLE } from "./place";
 import { hasMeasureTag, remeasure, remeasureScene } from "./remeasure";
 
 type El = ExcalidrawElement;
@@ -97,4 +99,52 @@ test("remeasureScene puts the fixed elements in the scene without an undo step",
   expect(hasMeasureTag(elements)).toBe(false);
   await remeasureScene(api as never);
   expect(updates).toHaveLength(1);
+});
+
+describe("remeasure on lines and titles", () => {
+  const centre = (el: El) => [el.x + el.width / 2, el.y + el.height / 2];
+
+  test("an arrow's label keeps its spot and the arrow isn't resized", () => {
+    const built = restoreElements(
+      markForMeasure(
+        buildTemplate(
+          TEMPLATES.find((t) => t.id === "decision")!,
+          { x: 0, y: 0 },
+          DEFAULT_STYLE,
+        ),
+      ),
+      null,
+      { repairBindings: true },
+    );
+    const fixed = remeasure(built)!;
+    const byId = new Map(fixed.map((el) => [el.id, el]));
+    const labels = built.filter(
+      (el) => el.type === "text" && built.find((c) => c.id === el.containerId)?.type === "arrow",
+    );
+    expect(labels.map((el) => (el.type === "text" ? el.originalText : "")).sort()).toEqual(["No", "Yes"]);
+    for (const label of labels) {
+      const [x, y] = centre(byId.get(label.id)!);
+      const [x0, y0] = centre(label);
+      expect(x).toBeCloseTo(x0!, 0);
+      expect(y).toBeCloseTo(y0!, 0);
+    }
+    for (const arrow of built.filter((el) => el.type === "arrow")) {
+      const after = byId.get(arrow.id) ?? arrow;
+      expect([after.width, after.height]).toEqual([arrow.width, arrow.height]);
+      expect(after.type === "arrow" && after.points).toEqual(arrow.type === "arrow" && arrow.points);
+    }
+  });
+
+  test("a centred title keeps its centre", () => {
+    const [title] = restoreElements(
+      convertToExcalidrawElements(
+        [{ type: "text", id: "title", x: 100, y: 0, text: "Customer onboarding", textAlign: "center" }],
+        { regenerateIds: false },
+      ),
+      null,
+    );
+    const guessed = { ...title!, x: title!.x - 50, width: title!.width + 100 } as El;
+    const fixed = remeasure([tag(guessed)])![0]!;
+    expect(fixed.x + fixed.width / 2).toBeCloseTo(guessed.x + guessed.width / 2, 5);
+  });
 });

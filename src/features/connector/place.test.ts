@@ -3,6 +3,7 @@ import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
 import { describe, expect, test } from "vitest";
 import { TEMPLATES } from "../editor/templates/templates";
 import { notesTemplate } from "./blocks";
+import { chartTemplate } from "./layout";
 import { MEASURE_KEY } from "./marks";
 import { addTemplate, freeSpot, newFrame } from "./place";
 
@@ -105,4 +106,24 @@ test("newFrame sits exactly where it's asked to", () => {
   // Zero is a position too (Excalidraw's converter treats it as missing).
   const origin = newFrame("Origin", 0, 0, 300, 400);
   expect([origin.x, origin.y]).toEqual([0, 0]);
+});
+
+test("a chart's title is centred over it and stays inside its area", () => {
+  const t = chartTemplate({
+    kind: "flowchart",
+    title: "Customer onboarding process overview",
+    nodes: [
+      { id: "a", label: "Start", role: "terminal" },
+      { id: "b", label: "Sign up" },
+    ],
+    links: [{ from: "a", to: "b" }],
+  });
+  const { elements } = addTemplate([], t, { area: "Onboarding" });
+  const frame = elements.find((el) => el.type === "frame")!;
+  const title = elements.find((el) => el.type === "text" && el.originalText.startsWith("Customer"))!;
+  const shapes = elements.filter((el) => el.customData?.udFlow);
+  const chart = boundsOf(shapes);
+  expect(title.x + title.width / 2).toBeCloseTo((chart.x1 + chart.x2) / 2, 0);
+  expect(title.x).toBeGreaterThanOrEqual(frame.x);
+  expect(title.x + title.width).toBeLessThanOrEqual(frame.x + frame.width);
 });

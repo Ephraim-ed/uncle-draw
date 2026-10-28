@@ -471,8 +471,11 @@ export function templateBounds(t: Template) {
     }
   }
   for (const n of t.notes ?? []) {
-    xs.push(n.x - 40, n.x + 40);
-    ys.push(n.y, n.y + 24);
+    // Free text is centred on x; its width is estimated (0.6em a character).
+    const size = n.size ?? 20;
+    const half = (Math.max(...n.text.split("\n").map((line) => line.length)) * size * 0.6) / 2;
+    xs.push(n.x - half, n.x + half);
+    ys.push(n.y, n.y + n.text.split("\n").length * size * 1.25);
   }
   if (t.table) {
     const { w, h } = tableSize(t.table);
@@ -586,11 +589,10 @@ export function buildTemplate(
     } as ExcalidrawElementSkeleton);
   }
 
-  const noteIds = (t.notes ?? []).map((n, i) => {
-    const id = idOf(`note${i}`);
+  (t.notes ?? []).forEach((n, i) => {
     skeletons.push({
       type: "text",
-      id,
+      id: idOf(`note${i}`),
       text: n.text,
       x: n.x + dx,
       y: n.y + dy,
@@ -599,13 +601,11 @@ export function buildTemplate(
       strokeColor: style.strokeColor,
       textAlign: "center",
     } as ExcalidrawElementSkeleton);
-    return id;
   });
 
+  // Free text is placed by its centre: the converter shifts centre-aligned text left by half itself.
   const elements = convertToExcalidrawElements(skeletons, { regenerateIds: false }).map(
-    (el): ExcalidrawElement =>
-      // Free text was placed by its center; now that it's measured, shift it left by half.
-      noteIds.includes(el.id) ? { ...el, x: el.x - el.width / 2, index: null } : { ...el, index: null },
+    (el): ExcalidrawElement => ({ ...el, index: null }),
   );
   return t.table ? [...elements, ...buildTable(t.table, dx, dy, style)] : elements;
 }
