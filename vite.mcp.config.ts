@@ -16,8 +16,8 @@ export default defineConfig({
     emptyOutDir: true,
     target: "node24",
     copyPublicDir: false,
-    rollupOptions: {
-      output: { format: "es", entryFileNames: "mcp.mjs", inlineDynamicImports: true },
+    rolldownOptions: {
+      output: { format: "es", entryFileNames: "mcp.mjs", codeSplitting: false },
     },
   },
 });
