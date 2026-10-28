@@ -17,9 +17,9 @@ import { excalidrawText } from "../table/textEngine";
  * afterwards (flow/flow.ts).
  */
 
-type Side = "top" | "bottom" | "left" | "right";
+export type Side = "top" | "bottom" | "left" | "right";
 
-interface Node {
+export interface Node {
   id: string;
   kind: FlowKind;
   x: number;
@@ -27,8 +27,11 @@ interface Node {
   label?: string;
   /** Overrides the kind's fill. */
   fill?: string;
+  /** Override the kind's size (a long label needs a bigger box). */
+  w?: number;
+  h?: number;
 }
-interface Link {
+export interface Link {
   from: string;
   fromSide: Side;
   to: string;
@@ -80,7 +83,7 @@ export interface Template {
   table?: TableSpec;
 }
 
-const SIZE: Record<FlowKind, { w: number; h: number }> = {
+export const SIZE: Record<FlowKind, { w: number; h: number }> = {
   terminal: { w: 160, h: 64 },
   step: { w: 180, h: 72 },
   decision: { w: 200, h: 120 },
@@ -140,7 +143,7 @@ const down = (from: string, to: string, label?: string) => link(from, "bottom", 
 const right = (from: string, to: string, label?: string) => link(from, "right", to, "left", { label });
 
 /** Board columns with sticky notes: headers at the top, notes stacked below. */
-function columns(
+export function columns(
   heads: readonly string[],
   cards: readonly (readonly string[])[],
   fills: readonly string[],
@@ -421,7 +424,7 @@ export interface TemplateStyle {
 /** Gap between an arrow's end and its shape, like Excalidraw's own bindings. */
 const GAP = 6;
 
-const sizeOf = (n: Node) => SIZE[n.kind];
+const sizeOf = (n: Node) => ({ w: n.w ?? SIZE[n.kind].w, h: n.h ?? SIZE[n.kind].h });
 
 function anchor(n: Node, side: Side): [number, number] {
   const { w, h } = sizeOf(n);
