@@ -69,17 +69,21 @@ npx supabase status -o env    # copy API_URL and ANON_KEY into .env.local
 | `npm test`             | Vitest unit and component tests                                 |
 | `npm run test:e2e`     | Playwright against local Supabase (see below)                   |
 | `npm run check:bundle` | Shell JS budget: ≤ 200 KB gzip, excluding the lazy editor chunk |
+| `npm run build:mcp`    | Bundle the Claude connector's server to `server-dist/mcp.mjs`   |
+| `npm run check:mcp`    | Check that bundle loads Excalidraw and builds charts in Node    |
+| `npm run test:server`  | The connector's server tests (some need local Supabase)         |
 | `npm run gen:types`    | Regenerate `src/lib/database.types.ts` from the local database  |
 | `npm run icons`        | Re-render the favicon set from the pencil mark                  |
 
 ## Testing
 
-| Layer              | Command                             | Needs                                               |
-| ------------------ | ----------------------------------- | --------------------------------------------------- |
-| Unit and component | `npm test`                          | nothing                                             |
-| Database (pgTAP)   | `npx supabase test db`              | local Supabase                                      |
-| Edge Function      | `npx deno test supabase/functions/` | nothing (Deno via npm)                              |
-| E2E                | `npm run test:e2e`                  | local Supabase plus the environment variables below |
+| Layer              | Command                             | Needs                                                          |
+| ------------------ | ----------------------------------- | -------------------------------------------------------------- |
+| Unit and component | `npm test`                          | nothing                                                        |
+| Database (pgTAP)   | `npx supabase test db`              | local Supabase                                                 |
+| Edge Function      | `npx deno test supabase/functions/` | nothing (Deno via npm)                                         |
+| E2E                | `npm run test:e2e`                  | local Supabase plus the environment variables below            |
+| Connector server   | `npm run test:server`               | local Supabase for the integration tests (they skip otherwise) |
 
 Run the E2E suite against the local stack:
 
@@ -103,6 +107,17 @@ CI (`.github/workflows/ci.yml`) runs everything on each pull request: lint, type
 - **Realtime:** collaboration uses private Realtime channels (`board:{id}`), authorized by RLS policies on `realtime.messages` in the migrations. Nothing needs turning on in the dashboard. Realtime has per-project message limits (about 100 a second on the free plan). Each active editor sends at most about 12 messages a second, batching cursor and edits, and nothing while alone on a board. If many people will draw at the same time, check your plan's limits.
 - **Voice and screen sharing:** audio and video go peer to peer over WebRTC; Realtime only carries the setup (one offer and one answer per connection). The browser needs a secure context (https, or localhost). By default the app uses public STUN servers, which connect most home and office networks. Networks that block peer-to-peer traffic need a TURN server: set `VITE_ICE_SERVERS` to a JSON array of `RTCIceServer` (see `.env.example`). TURN credentials in that variable end up in the public bundle, so use a provider that restricts them (e.g. by origin) or rotate them. Voice is capped at 8 people and a shared screen at 8 viewers, since everyone sends directly to everyone else.
 
+## Claude connector
+
+People can connect Uncle Draw to Claude (claude.ai → Settings → Connectors → Add custom connector, URL `https://<your domain>/api/mcp`) and ask Claude to draw charts, add tables and notes, and tidy boards. Sign-in is the person's own Uncle Draw account, so Claude reaches exactly the boards they can edit.
+
+- **Server:** `api/mcp.js` is a Vercel function that loads the prebuilt `server-dist/mcp.mjs` (`npm run build:mcp`, part of `npm run build`). It speaks MCP over Streamable HTTP, statelessly, and calls Supabase with the caller's token only, so RLS decides access.
+- **Sign-in:** Supabase Auth's OAuth 2.1 server (beta). In the dashboard, under Authentication → OAuth Server, turn it on, set the authorization path to `/oauth/consent`, and allow dynamic client registration. The app's `/oauth/consent` page asks the person to allow the connection. Locally, `supabase/config.toml` turns it on; claude.ai can't reach localhost, so test sign-in against a deployed preview.
+- **Discovery:** `/.well-known/oauth-protected-resource` (rewritten to the function) points clients at `<VITE_SUPABASE_URL>/auth/v1`.
+- **Snapshots:** tidying, deleting and restoring save the board to `board_snapshots` first (newest 20 per board), so Claude can put a board back.
+- **Live:** changes are broadcast on the board's Realtime channel, so open editors show them straight away, with a "Claude updated this board." notice. Text Claude adds is re-measured in the editor with the real fonts.
+- Run the integration tests with local Supabase: `export $(npx supabase status -o env | xargs) && npm run test:server`.
+
 ## Project layout
 
 ```
@@ -118,12 +133,16 @@ src/
       collab/   live collaboration: Realtime channel, message protocol, presence,
                 voice chat, presenter mode, screen sharing (WebRTC)
     share/      share dialog, edit links, join page, read-only share page (lazy)
+    connector/  the Claude connector's board operations: chart layout, notes, tables,
+                reading boards as units, tidying, snapshots, re-measuring text
   lib/          Supabase client, Zod schemas, IndexedDB cache, helpers
   styles/       tokens, fonts, sketch kit, Excalidraw overrides
 supabase/
   migrations/   schema, RLS, RPCs, storage buckets and policies
   functions/    get-shared-board (+ Deno tests)
   tests/        pgTAP tests
+server/mcp/     the Claude connector's server: auth, board store, MCP tools
+api/mcp.js      its Vercel function
 e2e/            Playwright specs
 ```
 

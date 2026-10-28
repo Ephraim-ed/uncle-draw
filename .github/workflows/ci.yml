@@ -67,6 +67,9 @@ jobs:
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium
 
+      - name: Claude connector server tests (against local Supabase)
+        run: npm run test:server
+
       - name: E2E (Playwright)
         run: npx playwright test
         env:
@@ -88,3 +91,6 @@ jobs:
 
       - name: Bundle size (shell JS ≤ 200 KB gzip)
         run: npm run check:bundle
+
+      - name: Claude connector bundle runs in Node
+        run: npm run check:mcp

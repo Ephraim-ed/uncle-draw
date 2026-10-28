@@ -1,3 +1,10 @@
 {
-  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+  "functions": {
+    "api/mcp.js": { "includeFiles": "server-dist/**", "maxDuration": 60 }
+  },
+  "rewrites": [
+    { "source": "/.well-known/oauth-protected-resource", "destination": "/api/mcp?resource-metadata=1" },
+    { "source": "/.well-known/oauth-protected-resource/(.*)", "destination": "/api/mcp?resource-metadata=1" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
 }
