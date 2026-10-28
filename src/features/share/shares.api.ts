@@ -1,4 +1,5 @@
 import { siteOrigin } from "../../lib/site";
+import { generateShareToken } from "../../lib/shareToken";
 import { supabase } from "../../lib/supabase";
 
 export interface ShareLink {
@@ -10,13 +11,8 @@ export interface ShareLink {
 
 const COLUMNS = "id, token, created_at, expires_at";
 
-/** 32 random bytes, base64url without padding: 43 chars, 256 bits (tech §6.5). */
-export function generateShareToken(): string {
-  const bytes = crypto.getRandomValues(new Uint8Array(32));
-  let binary = "";
-  for (const b of bytes) binary += String.fromCharCode(b);
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
+// Lives in lib/ so the connector's server can use it without the browser client.
+export { generateShareToken } from "../../lib/shareToken";
 
 /** Always on the public domain, so viewers never hit a protected alias. */
 export function shareUrl(token: string): string {
