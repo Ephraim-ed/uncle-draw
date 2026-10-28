@@ -205,6 +205,17 @@ describe("CollabSession (COLLAB-2…4, tech §15)", () => {
     expect(t.ticks()[0]!.payload.p).toBeUndefined();
   });
 
+  it("says when Claude changed the board, and not for a person's edits (AI-6)", () => {
+    const t = setup();
+    t.connect();
+    t.handlers().onMessage("tick", { s: PEER, e: [newElementWith(t.state.elements[1]!, { x: 5 })] });
+    expect(t.notify).not.toHaveBeenCalled();
+    t.handlers().onMessage("tick", { s: "claude-1234", p: { x: 1, y: 2, tool: "pointer", button: "up" } });
+    expect(t.notify).not.toHaveBeenCalled();
+    t.handlers().onMessage("tick", { s: "claude-1234", e: [newElementWith(t.state.elements[1]!, { x: 50 })] });
+    expect(t.notify).toHaveBeenCalledWith("Claude updated this board.");
+  });
+
   it("merges a collaborator's elements without undo history or echo", () => {
     const t = setup();
     t.connect();

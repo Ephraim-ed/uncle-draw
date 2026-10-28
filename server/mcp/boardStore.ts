@@ -4,6 +4,7 @@ import { CONNECTOR_SESSION_PREFIX } from "../../src/features/connector/marks";
 import type { Change } from "../../src/features/connector/place";
 import { ConnectorError } from "../../src/features/connector/types";
 import { COLLAB_CHUNK_BYTES, SCENE_MAX_BYTES } from "../../src/features/editor/constants";
+import { chunkElements } from "../../src/features/editor/collab/protocol";
 import { asJson, restoreScene, toDbPayload } from "../../src/features/editor/serialize";
 import type { Database, Json } from "../../src/lib/database.types";
 import { generateShareToken } from "../../src/lib/shareToken";
@@ -51,28 +52,6 @@ const MAX_ATTEMPTS = 3;
 const LIST_LIMIT = 50;
 const TITLE_MAX = 200;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-/** tickSchema's cap on elements per message. */
-const TICK_MAX_ELEMENTS = 20_000;
-
-/** Elements in chunks small enough for one live message each, like the editor's. */
-function chunks(elements: readonly ExcalidrawElement[]): ExcalidrawElement[][] {
-  const out: ExcalidrawElement[][] = [];
-  let current: ExcalidrawElement[] = [];
-  let bytes = 0;
-  for (const el of elements) {
-    const size = JSON.stringify(el).length;
-    if (current.length > 0 && (bytes + size > COLLAB_CHUNK_BYTES || current.length >= TICK_MAX_ELEMENTS)) {
-      out.push(current);
-      current = [];
-      bytes = 0;
-    }
-    current.push(el);
-    bytes += size;
-  }
-  if (current.length > 0) out.push(current);
-  return out;
-}
-
 export function supabaseBoardStore(
   token: string,
   sessionId = `${CONNECTOR_SESSION_PREFIX}${crypto.randomUUID()}`,
@@ -111,7 +90,10 @@ export function supabaseBoardStore(
     const channel = db.channel(`board:${boardId}`, { config: { private: true } });
     try {
       await db.realtime.setAuth(token);
-      for (const chunk of chunks(changed)) await channel.httpSend("tick", { s: sessionId, e: chunk });
+      // Chunked like the editor's own ticks.
+      for (const chunk of chunkElements(changed, COLLAB_CHUNK_BYTES)) {
+        await channel.httpSend("tick", { s: sessionId, e: chunk });
+      }
     } catch (e) {
       // The save already happened; open editors pick it up when they next save.
       console.warn("Live update failed", e);

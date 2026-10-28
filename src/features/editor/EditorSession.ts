@@ -43,6 +43,7 @@ import {
   toDbPayload,
 } from "./serialize";
 import { ThumbnailScheduler, renderThumbnail, type ThumbnailSnapshot } from "./thumbnail";
+import { hasMeasureTag, remeasureScene } from "../connector/remeasure";
 
 /**
  * Save state, a nonce that changes on every save (so "Saved" can re-animate),
@@ -139,6 +140,7 @@ export class EditorSession {
   /** Excalidraw is unmounting (or remounting): use captured snapshots, not the live canvas. */
   private suspended = false;
   private disposed = false;
+  private remeasuring = false;
   private readonly fileTries = new Map<string, number>();
   private readonly fileRequests = new Set<string>();
 
@@ -226,6 +228,21 @@ export class EditorSession {
 
   attach(api: ExcalidrawImperativeAPI) {
     this.api = api;
+  }
+
+  /**
+   * Text the Claude connector made was sized on the server (AI-6). Measure it
+   * here with the real fonts, on load or as it arrives live; it saves as my edit.
+   */
+  private remeasureClaudeText(elements: readonly ExcalidrawElement[]) {
+    const api = this.api;
+    if (this.remeasuring || !api || this.suspended || !hasMeasureTag(elements)) return;
+    this.remeasuring = true;
+    remeasureScene(api)
+      .catch((e) => console.warn("Couldn't measure Claude's text", e))
+      .finally(() => {
+        this.remeasuring = false;
+      });
   }
 
   /** The editor (re)mounted: the live canvas is usable again. */
@@ -356,6 +373,7 @@ export class EditorSession {
       this.latest = snapshot;
       this.queue.notifyChange(snapshot, fingerprint, local ? "local" : "remote");
       this.writeBackup(snapshot);
+      this.remeasureClaudeText(elements);
     }
 
     if (this.collab && appState.selectedElementIds !== this.lastSelection) {

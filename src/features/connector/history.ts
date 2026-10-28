@@ -18,10 +18,11 @@ export function deleteUnits(elements: readonly El[], unitIds: string[]): Change 
   const doomed = new Set<string>();
   for (const id of unitIds) {
     const unit = units.get(id);
-    if (!unit)
+    if (!unit) {
       throw new ConnectorError(
         `There's no unit "${id}" on the board. Read the board again; it may have changed.`,
       );
+    }
     if (unit.locked) throw new ConnectorError(`"${id}" is locked, so it can't be deleted from here.`);
     unit.elementIds.forEach((el) => doomed.add(el));
     if (unit.kind === "frame") {
