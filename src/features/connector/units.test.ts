@@ -178,7 +178,12 @@ describe("reading a big board in parts", () => {
   const many = () =>
     describeUnits(
       Array.from({ length: 5000 }, (_, i) =>
-        text(`t${String(i).padStart(4, "0")}`, (i % 50) * 300, Math.floor(i / 50) * 80, `Loose note number ${i} with a few words`),
+        text(
+          `t${String(i).padStart(4, "0")}`,
+          (i % 50) * 300,
+          Math.floor(i / 50) * 80,
+          `Loose note number ${i} with a few words`,
+        ),
       ),
     );
 

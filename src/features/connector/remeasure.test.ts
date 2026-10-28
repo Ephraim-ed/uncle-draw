@@ -5,7 +5,7 @@ import { describe, expect, test } from "vitest";
 import { buildTemplate, TEMPLATES } from "../editor/templates/templates";
 import { MEASURE_KEY, markForMeasure } from "./marks";
 import { DEFAULT_STYLE } from "./place";
-import { hasMeasureTag, remeasure, remeasureScene } from "./remeasure";
+import { hasMeasureTag, remeasure, remeasureScene, remeasureWatcher } from "./remeasure";
 
 type El = ExcalidrawElement;
 const tag = (el: El): El => ({ ...el, customData: { ...el.customData, [MEASURE_KEY]: true } }) as El;
@@ -146,5 +146,65 @@ describe("remeasure on lines and titles", () => {
     const guessed = { ...title!, x: title!.x - 50, width: title!.width + 100 } as El;
     const fixed = remeasure([tag(guessed)])![0]!;
     expect(fixed.x + fixed.width / 2).toBeCloseTo(guessed.x + guessed.width / 2, 5);
+  });
+});
+
+describe("remeasureWatcher", () => {
+  function fakeApi(initial: readonly El[]) {
+    let elements = initial;
+    const updates: SceneData[] = [];
+    return {
+      updates,
+      set: (els: readonly El[]) => (elements = els),
+      get: () => elements,
+      api: {
+        getSceneElementsIncludingDeleted: () => elements,
+        updateScene: (data: SceneData) => {
+          updates.push(data);
+          if (data.elements) elements = data.elements;
+        },
+      },
+    };
+  }
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+  test("checks the first scene even though nothing changed (a board Claude wrote while it was closed)", async () => {
+    const f = fakeApi(serverBox());
+    const watch = remeasureWatcher(f.api as never);
+    watch(f.get(), false);
+    await settle();
+    expect(f.updates).toHaveLength(1);
+    expect(hasMeasureTag(f.get())).toBe(false);
+  });
+
+  test("after the first, only changed scenes are checked", async () => {
+    const f = fakeApi([]);
+    const watch = remeasureWatcher(f.api as never);
+    watch(f.get(), false);
+    f.set(serverBox());
+    watch(f.get(), false);
+    await settle();
+    expect(f.updates).toHaveLength(0);
+    watch(f.get(), true);
+    await settle();
+    expect(f.updates).toHaveLength(1);
+  });
+
+  test("tagged text that arrives during a run is measured right after it", async () => {
+    const f = fakeApi(serverBox());
+    const watch = remeasureWatcher(f.api as never);
+    watch(f.get(), true);
+    // Before the first run finishes, more of Claude's text arrives.
+    const [free] = restoreElements(
+      convertToExcalidrawElements([{ type: "text", id: "late", x: 0, y: 300, text: "Late" }], {
+        regenerateIds: false,
+      }),
+      null,
+    );
+    f.set([...f.get(), tag({ ...free!, width: 999 } as El)]);
+    watch(f.get(), true);
+    await settle();
+    await settle();
+    expect(hasMeasureTag(f.get())).toBe(false);
   });
 });

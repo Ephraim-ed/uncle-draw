@@ -144,12 +144,17 @@ describe("growing an area next to other things", () => {
   test("a narrow addition grows the area downward without touching its neighbour", () => {
     const scene = twoAreas();
     const { elements } = addTemplate(scene, notesTemplate("B", ["three"]), { area: "Left" });
-    expect(overlap(box(frameOf(elements, "Left")), box(elements.find((el) => el.id === "neighbour")!))).toBe(false);
+    expect(overlap(box(frameOf(elements, "Left")), box(elements.find((el) => el.id === "neighbour")!))).toBe(
+      false,
+    );
   });
 
   test("a wide addition that would cover the neighbour is refused, changing nothing", () => {
     const scene = twoAreas();
-    const wide = tableTemplate(["Name", "Description of the thing", "Owner", "Due"], [["a", "b".repeat(30), "c", "d"]]);
+    const wide = tableTemplate(
+      ["Name", "Description of the thing", "Owner", "Due"],
+      [["a", "b".repeat(30), "c", "d"]],
+    );
     expect(() => addTemplate(scene, wide, { area: "Left" })).toThrow(ConnectorError);
   });
 

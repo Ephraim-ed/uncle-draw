@@ -139,3 +139,36 @@ export async function remeasureScene(
     captureUpdate: CaptureUpdateAction.NEVER,
   });
 }
+
+/**
+ * When the editor re-measures (AI-6): the first scene it shows (a board Claude
+ * changed while it was closed), then each changed scene. One run at a time,
+ * and once more if tagged text arrived during a run.
+ */
+export function remeasureWatcher(
+  api: Pick<ExcalidrawImperativeAPI, "getSceneElementsIncludingDeleted" | "updateScene">,
+  onError: (e: unknown) => void = (e) => console.warn("Couldn't measure Claude's text", e),
+): (elements: readonly El[], changed: boolean) => void {
+  let seen = false;
+  let running = false;
+  let again = false;
+  const start = () => {
+    running = true;
+    remeasureScene(api)
+      .catch(onError)
+      .finally(() => {
+        running = false;
+        if (again) {
+          again = false;
+          if (hasMeasureTag(api.getSceneElementsIncludingDeleted())) start();
+        }
+      });
+  };
+  return (elements, changed) => {
+    if (seen && !changed) return;
+    seen = true;
+    if (!hasMeasureTag(elements)) return;
+    if (running) again = true;
+    else start();
+  };
+}
