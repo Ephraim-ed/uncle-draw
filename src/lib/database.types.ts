@@ -85,6 +85,26 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"board_snapshots": {
+                  Row: {
+                    "app_state": NonNullable<Json>,"board_id": string,"created_at": string,"created_by": string,"id": string,"reason": string,"scene": NonNullable<Json>
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "app_state"?: NonNullable<Json>,"board_id": string,"created_at"?: string,"created_by"?: string,"id"?: string,"reason": string,"scene": NonNullable<Json>
+                  }
+                  Update: {
+                    "app_state"?: NonNullable<Json>,"board_id"?: string,"created_at"?: string,"created_by"?: string,"id"?: string,"reason"?: string,"scene"?: NonNullable<Json>
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "board_snapshots_board_id_fkey"
+      columns: ["board_id"]
+isOneToOne: false
+      referencedRelation: "boards"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"boards": {
                   Row: {
                     "app_state": NonNullable<Json>,"created_at": string,"deleted_at": string | null,"id": string,"owner_id": string,"scene": NonNullable<Json>,"scene_schema_version": number,"thumbnail_path": string | null,"title": string,"updated_at": string,"version": number
