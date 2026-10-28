@@ -25,3 +25,9 @@ supabase/.branches/
 # os / editors
 .DS_Store
 *.log
+
+# Claude connector server bundle (AI-1)
+server-dist/
+
+# superpowers brainstorming and plan workspaces
+.superpowers/
