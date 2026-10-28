@@ -4,7 +4,7 @@ import { describe, expect, test } from "vitest";
 import { TEMPLATES } from "../editor/templates/templates";
 import { notesTemplate } from "./blocks";
 import { MEASURE_KEY } from "./marks";
-import { addTemplate, freeSpot } from "./place";
+import { addTemplate, freeSpot, newFrame } from "./place";
 
 const process = TEMPLATES.find((t) => t.id === "process")!;
 const rect = (id: string, x: number, y: number, w = 100, h = 50, more: Partial<ExcalidrawElement> = {}) =>
@@ -97,4 +97,12 @@ describe("addTemplate", () => {
     // Placement ignores the deleted element: it goes next to the live one, not past the ghost.
     expect(boundsOf(changed).x1).toBeLessThan(2000);
   });
+});
+
+test("newFrame sits exactly where it's asked to", () => {
+  const frame = newFrame("Pricing", 100, 200, 300, 400);
+  expect([frame.type, frame.x, frame.y, frame.width, frame.height]).toEqual(["frame", 100, 200, 300, 400]);
+  // Zero is a position too (Excalidraw's converter treats it as missing).
+  const origin = newFrame("Origin", 0, 0, 300, 400);
+  expect([origin.x, origin.y]).toEqual([0, 0]);
 });

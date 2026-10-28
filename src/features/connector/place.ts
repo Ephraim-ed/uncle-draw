@@ -75,7 +75,8 @@ export function newFrame(
   height: number,
 ): ExcalidrawElement {
   const [frame] = convertToExcalidrawElements([{ type: "frame", children: [], name, x, y, width, height }]);
-  return { ...frame!, index: null } as ExcalidrawElement;
+  // The converter pads a frame out from 0, 0 as if no position were given; set the box ourselves.
+  return { ...frame!, x, y, width, height, index: null } as ExcalidrawElement;
 }
 
 /** Adds the scene's new and changed elements, with valid fractional indices and bindings. */
