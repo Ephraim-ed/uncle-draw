@@ -24,6 +24,11 @@ function reasonOf(e: unknown): string {
   return e instanceof Error && e.message ? e.message : String(e);
 }
 
+/** Claude's own sign-in callbacks; any other app's name could be made up. */
+function isClaude(host: string): boolean {
+  return ["claude.ai", "claude.com"].some((h) => host === h || host.endsWith(`.${h}`));
+}
+
 function hostOf(uri: string): string {
   try {
     return new URL(uri).host;
@@ -116,6 +121,7 @@ export default function OAuthConsentPage() {
   if (state.kind === "leaving") return <Splash label="Taking you back…" />;
 
   const { client, redirect_uri, user } = state.details;
+  const host = hostOf(redirect_uri);
   return (
     <FullPageMessage
       doodle={<PencilHandoffDoodle width={220} />}
@@ -129,10 +135,18 @@ export default function OAuthConsentPage() {
         </>
       }
     >
-      <p>It can see, create and change boards you can edit.</p>
-      <p className="mt-2">
-        You&apos;ll go back to {hostOf(redirect_uri)} afterwards. Signed in as {user.email}.
+      <p>
+        After you allow it, you&apos;ll be sent to <strong className="text-ink">{host}</strong>.
       </p>
+      {isClaude(host) ? null : (
+        <p role="alert" className="mt-2 font-semibold text-danger">
+          This isn&apos;t Claude&apos;s address. Only allow it if you trust {host}.
+        </p>
+      )}
+      <p className="mt-2">
+        It can see, create, change and delete boards you can edit, and make share links for boards you own.
+      </p>
+      <p className="mt-2 text-label">Signed in as {user.email}.</p>
     </FullPageMessage>
   );
 }

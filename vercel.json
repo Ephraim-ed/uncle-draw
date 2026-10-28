@@ -1,10 +1,37 @@
 {
   "functions": {
-    "api/mcp.js": { "includeFiles": "server-dist/**", "maxDuration": 60 }
+    "api/mcp.js": {
+      "includeFiles": "server-dist/**",
+      "maxDuration": 60
+    }
   },
   "rewrites": [
-    { "source": "/.well-known/oauth-protected-resource", "destination": "/api/mcp?resource-metadata=1" },
-    { "source": "/.well-known/oauth-protected-resource/(.*)", "destination": "/api/mcp?resource-metadata=1" },
-    { "source": "/(.*)", "destination": "/index.html" }
+    {
+      "source": "/.well-known/oauth-protected-resource",
+      "destination": "/api/mcp?resource-metadata=1"
+    },
+    {
+      "source": "/.well-known/oauth-protected-resource/(.*)",
+      "destination": "/api/mcp?resource-metadata=1"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/oauth/consent",
+      "headers": [
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        },
+        {
+          "key": "Content-Security-Policy",
+          "value": "frame-ancestors 'none'"
+        }
+      ]
+    }
   ]
 }

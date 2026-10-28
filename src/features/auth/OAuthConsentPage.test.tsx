@@ -37,9 +37,25 @@ describe("OAuthConsentPage", () => {
     expect(
       await screen.findByRole("heading", { name: "Claude wants to use Uncle Draw as you" }),
     ).toBeInTheDocument();
-    expect(screen.getByText(/claude\.ai/)).toBeInTheDocument();
-    expect(screen.getByText("It can see, create and change boards you can edit.")).toBeInTheDocument();
+    expect(screen.getByText("claude.ai", { selector: "strong" })).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "It can see, create, change and delete boards you can edit, and make share links for boards you own.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(api.getAuthorization).toHaveBeenCalledWith("auth-1");
+  });
+
+  it("warns when the app that asks isn't on a Claude address", async () => {
+    api.getAuthorization.mockResolvedValue({
+      ...details,
+      redirect_uri: "https://claude-ai.example.net/callback",
+    });
+    open();
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "This isn't Claude's address. Only allow it if you trust claude-ai.example.net.",
+    );
   });
 
   it("Allow approves and redirects to the returned url", async () => {
